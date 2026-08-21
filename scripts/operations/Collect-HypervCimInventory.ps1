@@ -7,6 +7,8 @@ $system = Get-CimInstance -Namespace root/cimv2 -ClassName Win32_ComputerSystem 
 $product = Get-CimInstance -Namespace root/cimv2 -ClassName Win32_ComputerSystemProduct | Select-Object -First 1 UUID
 $systems = @(Get-CimInstance -Namespace root/virtualization/v2 -ClassName Msvm_ComputerSystem | Select-Object Name, ElementName, Caption, EnabledState, HealthState, OperationalStatus)
 $settings = @(Get-CimInstance -Namespace root/virtualization/v2 -ClassName Msvm_VirtualSystemSettingData | Select-Object InstanceID, VirtualSystemIdentifier, ElementName, SettingType, VirtualSystemType, ConfigurationDataRoot, SnapshotDataRoot)
+$processors = @(Get-CimInstance -Namespace root/virtualization/v2 -ClassName Msvm_ProcessorSettingData | Select-Object InstanceID, VirtualQuantity, Reservation, Limit, Weight)
+$memory = @(Get-CimInstance -Namespace root/virtualization/v2 -ClassName Msvm_MemorySettingData | Select-Object InstanceID, VirtualQuantity, AllocationUnits, Reservation, Limit, Weight)
 $cluster = $null
 $clusterNodes = @()
 $clusterAvailable = $true
@@ -17,6 +19,6 @@ try {
 [pscustomobject]@{
     schemaVersion = '1.0'; capability = 'INVENTORY'; platform = 'HYPERV'; transport = 'LOCAL_CIM_V2'; mutationAttempted = $false
     host = [pscustomobject]@{ UUID = [string]$product.UUID; Name = [string]$system.Name; Domain = [string]$system.Domain; Manufacturer = [string]$system.Manufacturer; Model = [string]$system.Model; TotalPhysicalMemory = [uint64]$system.TotalPhysicalMemory }
-    computerSystems = $systems; settings = $settings; clusterAvailable = $clusterAvailable; cluster = $cluster; clusterNodes = $clusterNodes
+    computerSystems = $systems; settings = $settings; processors = $processors; memory = $memory; clusterAvailable = $clusterAvailable; cluster = $cluster; clusterNodes = $clusterNodes
     unavailableFamilies = @('SCVMM_HOST_GROUP','SCVMM_TEMPLATE','SCVMM_STORAGE_FABRIC','SCVMM_NETWORK_INTENT')
 } | ConvertTo-Json -Depth 9 -Compress

@@ -33,6 +33,27 @@ const scalars = (record: Record<string, unknown>, omitted: Set<string>) => Objec
   if (omitted.has(key)) return []
   return value === null || typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value)) ? [[key, value]] : []
 })) as HypervCimAsset['attributes']
+const uuidFromInstanceId = (value: unknown, field: string) => {
+  const candidate = string(value, field, 2048)
+  const match = candidate.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)
+  return match ? match[0]!.toLowerCase() : null
+}
+const keyedSettings = (value: unknown, field: string, allowedVmUids: Set<string>) => {
+  const result = new Map<string, Record<string, unknown>>()
+  for (const row of rows(value ?? [], field)) {
+    const vmUid = uuidFromInstanceId(row.InstanceID, `${field}.InstanceID`)
+    if (!vmUid || !allowedVmUids.has(vmUid)) continue
+    if (result.has(vmUid)) throw new Error(`Hyper-V CIM ${field} contains ambiguous settings for VM ${vmUid}`)
+    result.set(vmUid, row)
+  }
+  return result
+}
+const memoryBytes = (row: Record<string, unknown>) => {
+  const quantity = Number(row.VirtualQuantity); const units = String(row.AllocationUnits ?? '').trim().toLowerCase()
+  const multiplier: Record<string, number> = { byte: 1, 'byte * 2^10': 2 ** 10, 'byte * 2^20': 2 ** 20, 'byte * 2^30': 2 ** 30 }
+  if (!Number.isSafeInteger(quantity) || quantity <= 0 || !multiplier[units]) throw new Error('Hyper-V CIM memory allocation has invalid quantity or units')
+  return quantity * multiplier[units]!
+}
 
 export function normalizeHypervCimInventory(raw: unknown, context: ScvmmDiscoveryContext): HypervCimInventoryResult {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Hyper-V CIM inventory output must be an object')
@@ -43,12 +64,19 @@ export function normalizeHypervCimInventory(raw: unknown, context: ScvmmDiscover
   const host = root.host as Record<string, unknown>; const hostUid = normalizeUuid(host.UUID, 'host.UUID')
   const records: HypervCimAsset[] = [{ kind: 'HOST', sourceUid: hostUid, name: string(host.Name, 'host.Name', 253), attributes: scalars(host, new Set(['UUID', 'Name'])), relationships: {} }]
   const seen = new Set([`HOST:${hostUid}`])
-  for (const system of rows(root.computerSystems ?? [], 'computerSystems')) {
+  const systems = rows(root.computerSystems ?? [], 'computerSystems')
+  const vmUids = new Set(systems.map((system) => String(system.Name ?? '').toLowerCase()).filter((uid) => UUID.test(uid)))
+  const processors = keyedSettings(root.processors, 'processors', vmUids); const memory = keyedSettings(root.memory, 'memory', vmUids)
+  for (const system of systems) {
     const rawId = String(system.Name ?? '')
     if (!UUID.test(rawId)) continue // the local hosting-computer object is not a VM
     const sourceUid = normalizeUuid(rawId, 'computerSystems.Name'); const key = `VIRTUAL_MACHINE:${sourceUid}`
     if (seen.has(key)) throw new Error(`Hyper-V CIM contains duplicate immutable identity ${key}`); seen.add(key)
-    records.push({ kind: 'VIRTUAL_MACHINE', sourceUid, name: string(system.ElementName, 'computerSystems.ElementName', 253), attributes: scalars(system, new Set(['Name', 'ElementName'])), relationships: { host: hostUid } })
+    const processor = processors.get(sourceUid); const memorySetting = memory.get(sourceUid)
+    if (!processor || !memorySetting) throw new Error(`Hyper-V CIM VM ${sourceUid} lacks processor or memory allocation settings`)
+    const vCpuCount = Number(processor.VirtualQuantity)
+    if (!Number.isSafeInteger(vCpuCount) || vCpuCount <= 0) throw new Error(`Hyper-V CIM VM ${sourceUid} has invalid processor allocation`)
+    records.push({ kind: 'VIRTUAL_MACHINE', sourceUid, name: string(system.ElementName, 'computerSystems.ElementName', 253), attributes: { ...scalars(system, new Set(['Name', 'ElementName'])), vCpuCount, memoryBytes: memoryBytes(memorySetting) }, relationships: { host: hostUid } })
   }
   for (const setting of rows(root.settings ?? [], 'settings')) {
     const rawVmUid = String(setting.VirtualSystemIdentifier ?? '').trim()

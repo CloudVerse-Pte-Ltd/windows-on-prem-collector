@@ -4,19 +4,20 @@ import { normalizeHypervCimInventory } from '../../src/hyperv/cim-inventory.js'
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
 const context = { collectionRunId: uuid(999), collectedAt: '2026-08-21T00:00:00Z', connectorVersion: '0.1.0' }
 const base = { schemaVersion: '1.0', capability: 'INVENTORY', platform: 'HYPERV', transport: 'LOCAL_CIM_V2', mutationAttempted: false,
-  host: { UUID: uuid(1), Name: 'hv01', Domain: 'example.com' }, unavailableFamilies: ['SCVMM_HOST_GROUP', 'SCVMM_TEMPLATE', 'SCVMM_STORAGE_FABRIC', 'SCVMM_NETWORK_INTENT'] }
+  host: { UUID: uuid(1), Name: 'hv01', Domain: 'example.com' }, unavailableFamilies: ['SCVMM_HOST_GROUP', 'SCVMM_TEMPLATE', 'SCVMM_STORAGE_FABRIC', 'SCVMM_NETWORK_INTENT'],
+  processors: [{ InstanceID: `Microsoft:${uuid(2)}\\processor`, VirtualQuantity: 4 }, { InstanceID: `Microsoft:${uuid(9)}\\definition-a`, VirtualQuantity: 1 }, { InstanceID: `Microsoft:${uuid(9)}\\definition-b`, VirtualQuantity: 1 }], memory: [{ InstanceID: `Microsoft:${uuid(2)}\\memory`, VirtualQuantity: 8, AllocationUnits: 'byte * 2^30' }] }
 
 describe('C26 local Hyper-V CIM v2 fallback', () => {
   it('normalizes standalone host/VM/settings and declares reduced coverage explicitly', () => {
     const result = normalizeHypervCimInventory({ ...base, computerSystems: [{ Name: 'hv01', ElementName: 'host' }, { Name: uuid(2), ElementName: 'vm-renamed', EnabledState: 2 }], settings: [{ InstanceID: 'Microsoft:Definition\\VirtualSystem\\Version\\10.0', VirtualSystemIdentifier: null, ElementName: 'Microsoft Windows Server 2022' }, { InstanceID: 'Microsoft:cfg-2', VirtualSystemIdentifier: uuid(2), ElementName: 'cfg', SettingType: 3 }], clusterAvailable: false, clusterNodes: [] }, context)
     expect(result.reducedCoverage).toBe(true)
     expect(result.records.map(({ kind }) => kind)).toEqual(['HOST', 'VIRTUAL_MACHINE', 'VM_CONFIGURATION'])
-    expect(result.records[1]).toMatchObject({ sourceUid: uuid(2), relationships: { host: uuid(1) } })
+    expect(result.records[1]).toMatchObject({ sourceUid: uuid(2), attributes: { vCpuCount: 4, memoryBytes: 8589934592 }, relationships: { host: uuid(1) } })
     expect(result.capabilities).toMatchObject({ FAILOVER_CLUSTER: 'UNAVAILABLE', SCVMM_TEMPLATE: 'UNAVAILABLE' })
   })
 
   it('normalizes failover-cluster membership without using node names as identity', () => {
-    const result = normalizeHypervCimInventory({ ...base, computerSystems: [], settings: [], clusterAvailable: true, cluster: { Id: uuid(3), Name: 'cluster-a' }, clusterNodes: [{ Name: 'hv02' }, { Name: 'hv01' }] }, context)
+    const result = normalizeHypervCimInventory({ ...base, processors: [], memory: [], computerSystems: [], settings: [], clusterAvailable: true, cluster: { Id: uuid(3), Name: 'cluster-a' }, clusterNodes: [{ Name: 'hv02' }, { Name: 'hv01' }] }, context)
     expect(result.records.at(-1)).toMatchObject({ kind: 'FAILOVER_CLUSTER', sourceUid: uuid(3), relationships: { localHost: uuid(1) }, attributes: { nodeNames: '["hv01","hv02"]' } })
     expect(result.capabilities.FAILOVER_CLUSTER).toBe('READY')
   })
@@ -27,5 +28,6 @@ describe('C26 local Hyper-V CIM v2 fallback', () => {
     expect(() => normalizeHypervCimInventory({ ...source('x'), host: { UUID: 'not-a-uuid', Name: 'hv01' } }, context)).toThrow('immutable UUID')
     expect(() => normalizeHypervCimInventory({ ...source('x'), unavailableFamilies: [] }, context)).toThrow('reduced-coverage')
     expect(() => normalizeHypervCimInventory({ ...source('x'), settings: [{ InstanceID: 'bad', VirtualSystemIdentifier: 'not-a-uuid', ElementName: 'cfg' }] }, context)).toThrow('immutable UUID')
+    expect(() => normalizeHypervCimInventory({ ...source('x'), processors: [] }, context)).toThrow('lacks processor or memory')
   })
 })

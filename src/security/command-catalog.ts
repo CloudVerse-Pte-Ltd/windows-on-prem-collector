@@ -26,7 +26,7 @@ export const COMMAND_CATALOG = Object.freeze({
   }),
   'hyperv.cim.inventory.v1': Object.freeze({
     script: 'Collect-HypervCimInventory.ps1',
-    allowedCommands: Object.freeze(['ConvertTo-Json', 'Get-CimInstance', 'Set-StrictMode']),
+    allowedCommands: Object.freeze(['ConvertTo-Json', 'Copy-CloudVerseProperties', 'Get-CimInstance', 'Set-StrictMode']),
     parameters: Object.freeze([]),
   }),
   'hyperv.performance.v1': Object.freeze({

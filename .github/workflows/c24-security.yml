@@ -1,0 +1,55 @@
+name: c24-windows-security
+on:
+  pull_request:
+  push: { branches: [main] }
+permissions: { contents: read }
+jobs:
+  cross-platform-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=moderate
+  windows-policy:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Parse operational script and enforce exact command allowlist
+        shell: powershell
+        run: |
+          $allowed = @('ConvertTo-Json','Get-SCVMMServer','Get-SCUserRole','Get-SCVMHost','Import-Module','Select-Object','Set-StrictMode')
+          ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Discover-Scvmm.ps1 -AllowedCommand $allowed
+          $inventoryAllowed = @('ConvertTo-Json','Get-SCLogicalNetwork','Get-SCStorageArray','Get-SCStoragePool','Get-SCVirtualMachine','Get-SCVMCheckpoint','Get-SCVMHost','Get-SCVMHostCluster','Get-SCVMHostGroup','Get-SCVMNetwork','Get-SCVMTemplate','Get-SCVMMServer','Import-Module','Select-Object','Set-StrictMode')
+          ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-ScvmmInventory.ps1 -AllowedCommand $inventoryAllowed
+          $cimAllowed = @('ConvertTo-Json','Get-CimInstance','Select-Object','Set-StrictMode')
+          ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-HypervCimInventory.ps1 -AllowedCommand $cimAllowed
+          $performanceAllowed = @('ConvertTo-Json','Get-Counter','Get-VM','Select-Object','Set-StrictMode','Where-Object')
+          ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-HypervPerformance.ps1 -AllowedCommand $performanceAllowed
+      - name: Prove unsigned source cannot pass the release signature gate
+        shell: powershell
+        run: |
+          $signature = Get-AuthenticodeSignature ./scripts/operations/Discover-Scvmm.ps1
+          if ($signature.Status -eq 'Valid') { throw 'Source checkout must not masquerade as an approved signed release artifact' }
+          $inventorySignature = Get-AuthenticodeSignature ./scripts/operations/Collect-ScvmmInventory.ps1
+          if ($inventorySignature.Status -eq 'Valid') { throw 'Source checkout must not masquerade as an approved signed release artifact' }
+          $cimSignature = Get-AuthenticodeSignature ./scripts/operations/Collect-HypervCimInventory.ps1
+          if ($cimSignature.Status -eq 'Valid') { throw 'Source checkout must not masquerade as an approved signed release artifact' }
+          $performanceSignature = Get-AuthenticodeSignature ./scripts/operations/Collect-HypervPerformance.ps1
+          if ($performanceSignature.Status -eq 'Valid') { throw 'Source checkout must not masquerade as an approved signed release artifact' }
+      - name: Record CI language mode (deployment gate requires ConstrainedLanguage)
+        shell: powershell
+        run: |
+          $mode = [string]$ExecutionContext.SessionState.LanguageMode
+          Write-Host "Windows CI language mode: $mode"
+          if ($mode -ne 'FullLanguage') { throw "Unexpected hosted-runner language mode: $mode" }
+          Write-Host 'Hosted CI is not deployment evidence; signed release acceptance separately requires WDAC/AppLocker or JEA ConstrainedLanguage.'

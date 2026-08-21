@@ -8,7 +8,7 @@ const base = { schemaVersion: '1.0', capability: 'INVENTORY', platform: 'HYPERV'
 
 describe('C26 local Hyper-V CIM v2 fallback', () => {
   it('normalizes standalone host/VM/settings and declares reduced coverage explicitly', () => {
-    const result = normalizeHypervCimInventory({ ...base, computerSystems: [{ Name: 'hv01', ElementName: 'host' }, { Name: uuid(2), ElementName: 'vm-renamed', EnabledState: 2 }], settings: [{ InstanceID: 'Microsoft:cfg-2', VirtualSystemIdentifier: uuid(2), ElementName: 'cfg', SettingType: 3 }], clusterAvailable: false, clusterNodes: [] }, context)
+    const result = normalizeHypervCimInventory({ ...base, computerSystems: [{ Name: 'hv01', ElementName: 'host' }, { Name: uuid(2), ElementName: 'vm-renamed', EnabledState: 2 }], settings: [{ InstanceID: 'Microsoft:Definition\\VirtualSystem\\Version\\10.0', VirtualSystemIdentifier: null, ElementName: 'Microsoft Windows Server 2022' }, { InstanceID: 'Microsoft:cfg-2', VirtualSystemIdentifier: uuid(2), ElementName: 'cfg', SettingType: 3 }], clusterAvailable: false, clusterNodes: [] }, context)
     expect(result.reducedCoverage).toBe(true)
     expect(result.records.map(({ kind }) => kind)).toEqual(['HOST', 'VIRTUAL_MACHINE', 'VM_CONFIGURATION'])
     expect(result.records[1]).toMatchObject({ sourceUid: uuid(2), relationships: { host: uuid(1) } })
@@ -26,5 +26,6 @@ describe('C26 local Hyper-V CIM v2 fallback', () => {
     expect(normalizeHypervCimInventory(source('old'), context).records[1].sourceUid).toBe(normalizeHypervCimInventory(source('new'), context).records[1].sourceUid)
     expect(() => normalizeHypervCimInventory({ ...source('x'), host: { UUID: 'not-a-uuid', Name: 'hv01' } }, context)).toThrow('immutable UUID')
     expect(() => normalizeHypervCimInventory({ ...source('x'), unavailableFamilies: [] }, context)).toThrow('reduced-coverage')
+    expect(() => normalizeHypervCimInventory({ ...source('x'), settings: [{ InstanceID: 'bad', VirtualSystemIdentifier: 'not-a-uuid', ElementName: 'cfg' }] }, context)).toThrow('immutable UUID')
   })
 })

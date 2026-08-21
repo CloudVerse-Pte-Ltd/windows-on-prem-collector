@@ -51,7 +51,9 @@ export function normalizeHypervCimInventory(raw: unknown, context: ScvmmDiscover
     records.push({ kind: 'VIRTUAL_MACHINE', sourceUid, name: string(system.ElementName, 'computerSystems.ElementName', 253), attributes: scalars(system, new Set(['Name', 'ElementName'])), relationships: { host: hostUid } })
   }
   for (const setting of rows(root.settings ?? [], 'settings')) {
-    const vmUid = normalizeUuid(setting.VirtualSystemIdentifier, 'settings.VirtualSystemIdentifier')
+    const rawVmUid = String(setting.VirtualSystemIdentifier ?? '').trim()
+    if (!rawVmUid) continue // Hyper-V returns platform/version definition rows alongside realized VM settings.
+    const vmUid = normalizeUuid(rawVmUid, 'settings.VirtualSystemIdentifier')
     const sourceIdentifier = string(setting.InstanceID, 'settings.InstanceID', 1024)
     const sourceUid = createHash('sha256').update(`hyperv-setting|${hostUid}|${sourceIdentifier}`).digest('hex')
     const kind: HypervCimAssetKind = Number(setting.SettingType) === 5 ? 'CHECKPOINT' : 'VM_CONFIGURATION'

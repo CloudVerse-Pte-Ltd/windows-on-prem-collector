@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { platform, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { generateTransportCredential } from '../../src/security/transport-credential.js'
@@ -19,7 +19,9 @@ describe('collector transport credential', () => {
         transportTokenHash: createHash('sha256').update(token).digest('hex'),
       })
       expect(JSON.stringify(result)).not.toContain(token)
-      expect((await stat(tokenPath)).mode & 0o777).toBe(0o600)
+      if (platform() !== 'win32') {
+        expect((await stat(tokenPath)).mode & 0o777).toBe(0o600)
+      }
       await expect(generateTransportCredential(tokenPath)).rejects.toThrow()
     } finally {
       await rm(directory, { recursive: true })

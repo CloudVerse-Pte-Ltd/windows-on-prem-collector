@@ -13,6 +13,7 @@ The collector is an outbound-only Windows service. It has no listener, interacti
 | Credential theft | gMSA/Windows service identity or Windows Credential Manager reference; no password CLI argument, output, bundle, transcript or config export. Redaction is defense in depth. |
 | Lateral movement | Exact SCVMM host/port and CPD HTTPS egress; no inbound rule; service account denied interactive logon; no arbitrary remoting. |
 | Replay/tenant substitution | C06 tenant-bound Ed25519 envelope, bundle/nonce replay ledger and quarantine. |
+| Transport-token theft | Generate the 256-bit token inside the collector boundary, store it in the service credential file, and enroll only its lowercase SHA-256 hash. CPD requires both this bearer proof and the Ed25519 signature. |
 | Collector or SaaS outage | Encrypted bounded C36 spool; explicit backpressure; no oldest-item deletion. |
 
 ## Deployment gate

@@ -1,6 +1,7 @@
 export * from './security/command-catalog.js'
 export * from './security/powershell-runner.js'
 export * from './security/release-manifest.js'
+export * from './security/transport-credential.js'
 export * from './security/redaction.js'
 export * from './scvmm/discovery.js'
 export * from './scvmm/inventory.js'

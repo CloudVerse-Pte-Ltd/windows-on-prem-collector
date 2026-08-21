@@ -2,7 +2,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $collectedAt = [DateTime]::UtcNow.ToString('o')
-$vms = @(Get-VM | Select-Object Id, Name)
+$vms = @(); foreach ($vm in @(Get-VM)) { $vms += [pscustomobject]@{ Id = $vm.Id; Name = $vm.Name } }
 $definitions = @(
     @{ Path = '\Hyper-V Hypervisor Virtual Processor(*)\% Guest Run Time'; Key = 'guest.cpu.usage.percent'; Scale = 1 },
     @{ Path = '\Hyper-V Dynamic Memory VM(*)\Physical Memory'; Key = 'guest.memory.assigned.bytes'; Scale = 1MB },
@@ -15,11 +15,10 @@ foreach ($definition in $definitions) {
         $counter = Get-Counter -Counter $definition.Path -SampleInterval 1 -MaxSamples 1
         foreach ($sample in $counter.CounterSamples) {
             if ($sample.InstanceName -eq '_total') { continue }
-            $matches = @($vms | Where-Object {
-                $sample.InstanceName -eq $_.Name -or
-                $sample.InstanceName -like "$($_.Name):*" -or
-                $sample.InstanceName -match [regex]::Escape([string]$_.Id)
-            })
+            $matches = @()
+            foreach ($vm in $vms) {
+                if ($sample.InstanceName -eq $vm.Name -or $sample.InstanceName -like "$($vm.Name):*" -or $sample.InstanceName -match [regex]::Escape([string]$vm.Id)) { $matches += $vm }
+            }
             if ($matches.Count -ne 1) {
                 $gaps += [pscustomobject]@{ code = 'COUNTER_INSTANCE_VM_GUID_UNRESOLVED'; metricKey = $definition.Key; details = @{ instanceName = $sample.InstanceName; matchCount = $matches.Count } }
                 continue

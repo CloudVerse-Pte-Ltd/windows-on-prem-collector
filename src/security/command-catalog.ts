@@ -26,12 +26,12 @@ export const COMMAND_CATALOG = Object.freeze({
   }),
   'hyperv.cim.inventory.v1': Object.freeze({
     script: 'Collect-HypervCimInventory.ps1',
-    allowedCommands: Object.freeze(['ConvertTo-Json', 'Get-CimInstance', 'Select-Object', 'Set-StrictMode']),
+    allowedCommands: Object.freeze(['ConvertTo-Json', 'Get-CimInstance', 'Set-StrictMode']),
     parameters: Object.freeze([]),
   }),
   'hyperv.performance.v1': Object.freeze({
     script: 'Collect-HypervPerformance.ps1',
-    allowedCommands: Object.freeze(['ConvertTo-Json', 'Get-Counter', 'Get-VM', 'Select-Object', 'Set-StrictMode', 'Where-Object']),
+    allowedCommands: Object.freeze(['ConvertTo-Json', 'Get-Counter', 'Get-VM', 'Set-StrictMode']),
     parameters: Object.freeze([]),
   }),
 }) satisfies Record<OperationId, { script: string; allowedCommands: readonly string[]; parameters: readonly string[] }>

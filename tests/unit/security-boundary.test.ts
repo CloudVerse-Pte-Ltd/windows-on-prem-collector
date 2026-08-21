@@ -126,10 +126,11 @@ describe('C24 Windows collector security boundary', () => {
 
   it('the C32 source uses only local read-only counters and emits explicit mapping gaps', async () => {
     const source = await readFile(new URL('../../scripts/operations/Collect-HypervPerformance.ps1', import.meta.url), 'utf8')
-    for (const command of ['Get-VM', 'Get-Counter', 'Select-Object', 'ConvertTo-Json']) expect(source).toContain(command)
+    for (const command of ['Get-VM', 'Get-Counter', 'ConvertTo-Json']) expect(source).toContain(command)
+    expect(source).not.toContain('Select-Object')
     expect(source).not.toMatch(/-ComputerName|-CimSession|\b(?:Set|New|Remove|Start|Stop|Invoke)-(?!StrictMode)\w+/)
     expect(source).toContain('COUNTER_INSTANCE_VM_GUID_UNRESOLVED')
-    expect(source).toContain("[regex]::Escape([string]$_.Id)")
+    expect(source).toContain("[regex]::Escape([string]$vm.Id)")
     expect(source).toContain("Scale = 1MB")
     expect(source).toContain("$sample.InstanceName -eq '_total'")
     expect(source).toContain('mutationAttempted = $false')

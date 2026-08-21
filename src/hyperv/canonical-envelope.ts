@@ -51,6 +51,16 @@ export interface HypervTelemetryEnvelope {
   gaps: Array<{ assetKind?: 'VIRTUAL_MACHINE'; sourceUid?: string; semanticMetric: string; expectedStart: string; expectedEnd: string; reasonClass: string; retryable: boolean; state: 'OPEN'; evidence: Record<string, unknown> }>
 }
 
+export interface HypervCollectionPayload {
+  records: [HypervInventoryEnvelope, HypervTelemetryEnvelope]
+  completion: {
+    status: 'SUCCEEDED' | 'PARTIAL'
+    recordCounts: { assets: number; metrics: number; gaps: number; errors: number }
+    coverage: { inventory: 'COMPLETE'; telemetry: 'COMPLETE' | 'PARTIAL'; reducedCoverage: boolean }
+    errors: Array<Record<string, unknown>>
+  }
+}
+
 export function toHypervTelemetryEnvelope(integrationId: number, managementPlaneUid: string, collectedAt: string, facts: HypervMetricFact[], gaps: HypervMetricGap[]): HypervTelemetryEnvelope {
   if (!Number.isSafeInteger(integrationId) || integrationId <= 0 || !PLANE_UID.test(managementPlaneUid)) throw new Error('Hyper-V telemetry scope is invalid')
   const end = new Date(collectedAt); if (!Number.isFinite(end.getTime())) throw new Error('Hyper-V telemetry collectedAt is invalid')
@@ -68,5 +78,19 @@ export function toHypervTelemetryEnvelope(integrationId: number, managementPlane
       expectedStart: start.toISOString(), expectedEnd: end.toISOString(), reasonClass: gap.code,
       retryable: gap.code !== 'NO_LOCAL_HISTORY', state: 'OPEN', evidence: gap.details || {},
     })),
+  }
+}
+
+export function toHypervCollectionPayload(inventory: HypervInventoryEnvelope, telemetry: HypervTelemetryEnvelope): HypervCollectionPayload {
+  if (inventory.integrationId !== telemetry.integrationId || inventory.managementPlaneUid.toLowerCase() !== telemetry.managementPlaneUid.toLowerCase()) throw new Error('Hyper-V inventory and telemetry scope must match')
+  const errors = telemetry.gaps.map((gap) => ({ code: gap.reasonClass, semanticMetric: gap.semanticMetric, retryable: gap.retryable }))
+  return {
+    records: [inventory, telemetry],
+    completion: {
+      status: telemetry.gaps.length ? 'PARTIAL' : 'SUCCEEDED',
+      recordCounts: { assets: inventory.records.length, metrics: telemetry.metrics.length, gaps: telemetry.gaps.length, errors: errors.length },
+      coverage: { inventory: 'COMPLETE', telemetry: telemetry.gaps.length ? 'PARTIAL' : 'COMPLETE', reducedCoverage: inventory.reducedCoverage },
+      errors,
+    },
   }
 }

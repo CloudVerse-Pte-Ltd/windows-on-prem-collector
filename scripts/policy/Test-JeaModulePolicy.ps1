@@ -11,7 +11,8 @@ $expectedFunctions = @(
   'Invoke-CloudVerseHypervInventory',
   'Invoke-CloudVerseHypervPerformance',
   'Invoke-CloudVerseScvmmDiscovery',
-  'Invoke-CloudVerseScvmmInventory'
+  'Invoke-CloudVerseScvmmInventory',
+  'Invoke-CloudVerseScvmmPerformance'
 )
 $functions = @($ast.FindAll({param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst]}, $true) | ForEach-Object Name | Sort-Object)
 if (($functions -join ',') -ne ($expectedFunctions -join ',')) { throw "JEA function surface differs from the immutable catalog: $($functions -join ',')" }
@@ -23,6 +24,7 @@ $expectedOperations = @(
   "& (Join-Path `$operations 'Collect-HypervCimInventory.ps1')",
   "& (Join-Path `$operations 'Collect-HypervPerformance.ps1')",
   "& (Join-Path `$operations 'Collect-ScvmmInventory.ps1') -Server `$Server -Port `$Port",
+  "& (Join-Path `$operations 'Collect-ScvmmPerformance.ps1') -Server `$Server -Port `$Port",
   "& (Join-Path `$operations 'Discover-Scvmm.ps1') -Server `$Server -Port `$Port"
 )
 $actualOperations = @($dynamicCommands | ForEach-Object {$_.Extent.Text.Trim()} | Sort-Object)

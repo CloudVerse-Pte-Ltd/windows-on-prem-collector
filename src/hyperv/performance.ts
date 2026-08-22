@@ -5,6 +5,9 @@ const MAX_ROWS = 1_000_000
 export const HYPERV_COUNTER_REGISTRY = Object.freeze({
   'guest.cpu.usage.percent': { unit: 'percent', aggregation: 'GAUGE' },
   'guest.memory.assigned.bytes': { unit: 'bytes', aggregation: 'GAUGE' },
+  'guest.memory.usage.percent': { unit: 'percent', aggregation: 'GAUGE' },
+  'guest.storage.iops': { unit: 'operations_per_second', aggregation: 'GAUGE' },
+  'guest.network.io.bytes_per_second': { unit: 'bytes_per_second', aggregation: 'GAUGE' },
   'guest.storage.read.bytes_per_second': { unit: 'bytes_per_second', aggregation: 'GAUGE' },
   'guest.storage.write.bytes_per_second': { unit: 'bytes_per_second', aggregation: 'GAUGE' },
 } as const)
@@ -24,7 +27,7 @@ function percentile95(values: number[]) {
 
 export function normalizeHypervPerformanceOutput(raw: unknown) {
   const root = map(raw)
-  if (root.schemaVersion !== '1.0' || root.capability !== 'TELEMETRY' || root.platform !== 'HYPERV' || root.transport !== 'LOCAL_PERFORMANCE_COUNTERS' || root.mutationAttempted !== false) throw new Error('Hyper-V performance output violated the signed contract')
+  if (root.schemaVersion !== '1.0' || root.capability !== 'TELEMETRY' || root.platform !== 'HYPERV' || !['LOCAL_PERFORMANCE_COUNTERS', 'SCVMM_PERFORMANCE_DATA'].includes(String(root.transport)) || root.mutationAttempted !== false) throw new Error('Hyper-V performance output violated the signed contract')
   if (!Array.isArray(root.rows) || root.rows.length > MAX_ROWS || !Array.isArray(root.gaps) || root.gaps.length > MAX_ROWS) throw new Error('Hyper-V performance rows or gaps exceed bounds')
   const facts: HypervMetricFact[] = root.rows.map((candidate, index) => {
     const row = map(candidate); const vmUid = bounded(row.vmUid, `row ${index} vmUid`, 64)
@@ -38,7 +41,7 @@ export function normalizeHypervPerformanceOutput(raw: unknown) {
       provenance: { instanceName: bounded(row.instanceName, `row ${index} instanceName`), counterPath: bounded(row.counterPath, `row ${index} counterPath`, 4096) } }
   })
   const gaps: HypervMetricGap[] = root.gaps.map((candidate, index) => { const gap = map(candidate); return { code: bounded(gap.code, `gap ${index} code`, 128), vmUid: typeof gap.vmUid === 'string' ? gap.vmUid.toLowerCase() : undefined, metricKey: typeof gap.metricKey === 'string' ? gap.metricKey : undefined, details: map(gap.details) } })
-  if (!facts.length && !gaps.some((gap) => gap.code === 'NO_LOCAL_HISTORY')) gaps.push({ code: 'NO_LOCAL_HISTORY' })
+  if (!facts.length && !gaps.some((gap) => gap.code === 'NO_LOCAL_HISTORY' || gap.code === 'NO_SCVMM_HISTORY')) gaps.push({ code: root.transport === 'SCVMM_PERFORMANCE_DATA' ? 'NO_SCVMM_HISTORY' : 'NO_LOCAL_HISTORY' })
   const groups = new Map<string, HypervMetricFact[]>()
   for (const fact of facts) { const key = `${fact.vmUid}|${fact.metricKey}`; groups.set(key, [...(groups.get(key) ?? []), fact]) }
   const rollups: HypervMetricRollup[] = [...groups.values()].map((items) => ({ vmUid: items[0]!.vmUid, metricKey: items[0]!.metricKey, sampleCount: items.length,

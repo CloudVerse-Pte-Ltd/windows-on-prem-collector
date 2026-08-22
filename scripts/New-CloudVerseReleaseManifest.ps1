@@ -7,7 +7,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $scripts = [ordered]@{}
-foreach ($name in @('Discover-Scvmm.ps1','Collect-ScvmmInventory.ps1','Collect-HypervCimInventory.ps1','Collect-HypervPerformance.ps1')) {
+foreach ($name in @('Discover-Scvmm.ps1','Collect-ScvmmInventory.ps1','Collect-ScvmmPerformance.ps1','Collect-HypervCimInventory.ps1','Collect-HypervPerformance.ps1')) {
   $path = Join-Path $ScriptsDirectory $name
   if (-not (Test-Path $path -PathType Leaf)) { throw "Missing operational script $name" }
   $signature = Get-AuthenticodeSignature -LiteralPath $path

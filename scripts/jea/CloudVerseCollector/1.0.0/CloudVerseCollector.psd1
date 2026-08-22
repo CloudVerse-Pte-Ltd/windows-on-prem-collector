@@ -5,7 +5,7 @@
   Author = 'CloudVerse Pte. Ltd.'
   CompanyName = 'CloudVerse Pte. Ltd.'
   Copyright = 'Copyright CloudVerse Pte. Ltd.'
-  FunctionsToExport = @('Get-CloudVerseExecutionBoundary','Invoke-CloudVerseScvmmDiscovery','Invoke-CloudVerseScvmmInventory','Invoke-CloudVerseHypervInventory','Invoke-CloudVerseHypervPerformance')
+  FunctionsToExport = @('Get-CloudVerseExecutionBoundary','Invoke-CloudVerseScvmmDiscovery','Invoke-CloudVerseScvmmInventory','Invoke-CloudVerseScvmmPerformance','Invoke-CloudVerseHypervInventory','Invoke-CloudVerseHypervPerformance')
   CmdletsToExport = @()
   VariablesToExport = @()
   AliasesToExport = @()

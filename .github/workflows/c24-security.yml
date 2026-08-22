@@ -31,6 +31,8 @@ jobs:
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Discover-Scvmm.ps1 -AllowedCommand $allowed
           $inventoryAllowed = @('ConvertTo-Json','Get-SCLogicalNetwork','Get-SCStorageArray','Get-SCStoragePool','Get-SCVirtualMachine','Get-SCVMCheckpoint','Get-SCVMHost','Get-SCVMHostCluster','Get-SCVMHostGroup','Get-SCVMNetwork','Get-SCVMTemplate','Get-SCVMMServer','Import-Module','Select-Object','Set-StrictMode')
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-ScvmmInventory.ps1 -AllowedCommand $inventoryAllowed
+          $scvmmPerformanceAllowed = @('ConvertTo-Json','Get-SCPerformanceData','Get-SCVirtualMachine','Get-SCVMMServer','Import-Module','Set-StrictMode')
+          ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-ScvmmPerformance.ps1 -AllowedCommand $scvmmPerformanceAllowed
           $cimAllowed = @('ConvertTo-Json','Copy-CloudVerseProperties','Get-CimInstance','Set-StrictMode')
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-HypervCimInventory.ps1 -AllowedCommand $cimAllowed
           $performanceAllowed = @('ConvertTo-Json','Get-Counter','Get-VM','Set-StrictMode')
@@ -52,6 +54,8 @@ jobs:
           if ($signature.Status -eq 'Valid') { throw 'Source checkout must not masquerade as an approved signed release artifact' }
           $inventorySignature = Get-AuthenticodeSignature ./scripts/operations/Collect-ScvmmInventory.ps1
           if ($inventorySignature.Status -eq 'Valid') { throw 'Source checkout must not masquerade as an approved signed release artifact' }
+          $scvmmPerformanceSignature = Get-AuthenticodeSignature ./scripts/operations/Collect-ScvmmPerformance.ps1
+          if ($scvmmPerformanceSignature.Status -eq 'Valid') { throw 'Source checkout must not masquerade as an approved signed release artifact' }
           $cimSignature = Get-AuthenticodeSignature ./scripts/operations/Collect-HypervCimInventory.ps1
           if ($cimSignature.Status -eq 'Valid') { throw 'Source checkout must not masquerade as an approved signed release artifact' }
           $performanceSignature = Get-AuthenticodeSignature ./scripts/operations/Collect-HypervPerformance.ps1

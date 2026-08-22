@@ -2,6 +2,8 @@
 
 Outbound-only collector for Microsoft Hyper-V and System Center Virtual Machine Manager. It inventories immutable host/VM/storage/network topology, captures Hyper-V performance counters, creates Ed25519-signed canonical bundles, encrypts its bounded local spool with AES-256-GCM, and uploads to the CloudVerse control plane or exports signed bundles for offline import.
 
+SCVMM mode collects VM CPU, dynamic-memory, storage-IOPS and network-IO history through the documented read-only `Get-SCPerformanceData` API, always keyed by the immutable VMM VM GUID. Missing history, failed counters, invalid values and static-memory semantics become explicit metric gaps; local host counters are never attributed to a remote VMM estate.
+
 ## Trust boundary
 
 The runtime never accepts inbound commands. PowerShell execution is limited to the immutable command catalog, exact packaged scripts, `AllSigned`, approved signer thumbprints, and the canonical Windows PowerShell executable. The selected execution boundary is explicit: WDAC/AppLocker must place direct execution in `ConstrainedLanguage`, while the supplied JEA endpoint exposes four fixed functions to the collector in `NoLanguage`. Source checkouts are intentionally unsigned and cannot pass the production release gate.

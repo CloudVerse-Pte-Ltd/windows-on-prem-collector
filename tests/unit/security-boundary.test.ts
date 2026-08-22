@@ -14,14 +14,17 @@ async function harness(options: { tamper?: boolean; signatureStatus?: string; si
   const inventoryScript = Buffer.from('Get-SCVirtualMachine\n')
   const cimScript = Buffer.from('Get-CimInstance\n')
   const performanceScript = Buffer.from('Get-Counter\n')
+  const scvmmPerformanceScript = Buffer.from('Get-SCPerformanceData\n')
   await writeFile(join(directory, 'Discover-Scvmm.ps1'), options.tamper ? Buffer.from('Set-SCVMMServer\n') : script)
   await writeFile(join(directory, 'Collect-ScvmmInventory.ps1'), inventoryScript)
   await writeFile(join(directory, 'Collect-HypervCimInventory.ps1'), cimScript)
   await writeFile(join(directory, 'Collect-HypervPerformance.ps1'), performanceScript)
+  await writeFile(join(directory, 'Collect-ScvmmPerformance.ps1'), scvmmPerformanceScript)
   const manifestPath = join(directory, 'release-manifest.json')
   await writeFile(manifestPath, JSON.stringify({ schemaVersion: 1, catalogVersion: 'c25-v1', scripts: {
     'Discover-Scvmm.ps1': { sha256: createHash('sha256').update(script).digest('hex'), signerThumbprints: [thumbprint] },
     'Collect-ScvmmInventory.ps1': { sha256: createHash('sha256').update(inventoryScript).digest('hex'), signerThumbprints: [thumbprint] },
+    'Collect-ScvmmPerformance.ps1': { sha256: createHash('sha256').update(scvmmPerformanceScript).digest('hex'), signerThumbprints: [thumbprint] },
     'Collect-HypervCimInventory.ps1': { sha256: createHash('sha256').update(cimScript).digest('hex'), signerThumbprints: [thumbprint] },
     'Collect-HypervPerformance.ps1': { sha256: createHash('sha256').update(performanceScript).digest('hex'), signerThumbprints: [thumbprint] },
   } }))
@@ -36,7 +39,7 @@ afterEach(async () => Promise.all(temporaryDirectories.splice(0).map((directory)
 
 describe('C24 Windows collector security boundary', () => {
   it('has a closed read-only command catalog with no mutation or generic execution cmdlets', () => {
-    expect(Object.keys(COMMAND_CATALOG)).toEqual(['scvmm.discovery.v1', 'scvmm.inventory.v1', 'hyperv.cim.inventory.v1', 'hyperv.performance.v1'])
+    expect(Object.keys(COMMAND_CATALOG)).toEqual(['scvmm.discovery.v1', 'scvmm.inventory.v1', 'scvmm.performance.v1', 'hyperv.cim.inventory.v1', 'hyperv.performance.v1'])
     const commands = Object.values(COMMAND_CATALOG).flatMap((operation) => [...operation.allowedCommands])
     expect(commands).toContain('Get-SCVMMServer')
     expect(commands.filter((command) => command !== 'Set-StrictMode').every((command) => !/^(Set|New|Remove|Start|Stop|Invoke)-/i.test(command))).toBe(true)
@@ -54,14 +57,14 @@ describe('C24 Windows collector security boundary', () => {
     expect(() => new ConstrainedPowerShellRunner({ scriptsDirectory: directory, manifestPath: join(directory, 'manifest.json'), powershellPath: 'C:\\Temp\\powershell.exe', allowedScvmmEndpoints: [{ server: 'vmm01.example.com', port: 8100 }] })).toThrow('canonical')
     const { runner, executor } = await harness(); await runner.initialize()
     await expect(runner.runScvmmDiscovery({ server: 'other-internal.example.com', port: 8100 })).rejects.toThrow('not allowlisted')
-    expect(executor).toHaveBeenCalledTimes(5)
+    expect(executor).toHaveBeenCalledTimes(6)
   })
 
   it('verifies digest and approved Authenticode signer before fixed argument-array execution', async () => {
     const { runner, executor, directory } = await harness(); await runner.initialize()
     await expect(runner.runScvmmDiscovery({ server: 'vmm01.example.com', port: 8100 })).resolves.toMatchObject({ requestedRole: 'ReadOnlyAdmin' })
-    expect(executor).toHaveBeenCalledTimes(6)
-    const [file, args] = executor.mock.calls[5]
+    expect(executor).toHaveBeenCalledTimes(7)
+    const [file, args] = executor.mock.calls[6]
     expect(file).toMatch(/powershell\.exe$/i)
     expect(args).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'AllSigned', '-File', await realpath(resolve(directory, 'Discover-Scvmm.ps1')), '-Server', 'vmm01.example.com', '-Port', '8100'])
   })
@@ -72,6 +75,13 @@ describe('C24 Windows collector security boundary', () => {
     const [file, args] = executor.mock.calls.at(-1)!
     expect(file).toMatch(/powershell\.exe$/i)
     expect(args).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'AllSigned', '-File', await realpath(resolve(directory, 'Collect-HypervCimInventory.ps1'))])
+  })
+
+  it('executes SCVMM performance through the fixed endpoint and catalog operation', async () => {
+    const { runner, executor } = await harness({ jea: true }); await runner.initialize()
+    await runner.runScvmmPerformance({ server: 'vmm01.example.com', port: 8100 })
+    const [, args] = executor.mock.calls.at(-1)!
+    expect(args).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'AllSigned', '-ConfigurationName', 'CloudVerseCollector', '-Command', 'Invoke-CloudVerseScvmmPerformance', '-Server', 'vmm01.example.com', '-Port', '8100'])
   })
 
   it('executes Hyper-V performance collection locally with no caller-controlled arguments', async () => {
@@ -148,6 +158,16 @@ describe('C24 Windows collector security boundary', () => {
     expect(source).toContain("[regex]::Escape([string]$vm.Id)")
     expect(source).toContain("Scale = 1MB")
     expect(source).toContain("$sample.InstanceName -eq '_total'")
+    expect(source).toContain('mutationAttempted = $false')
+  })
+
+  it('the SCVMM C32 source uses the documented read-only performance API and immutable VM GUIDs', async () => {
+    const source = await readFile(new URL('../../scripts/operations/Collect-ScvmmPerformance.ps1', import.meta.url), 'utf8')
+    for (const counter of ['CPUUsage', 'MemoryUsage', 'StorageIOPSUsage', 'NetworkIOUsage']) expect(source).toContain(counter)
+    for (const command of ['Get-SCVMMServer', 'Get-SCVirtualMachine', 'Get-SCPerformanceData']) expect(source).toContain(command)
+    expect(source).toContain("TimeFrame Hour")
+    expect(source).toContain("vmUid = $vmUid")
+    expect(source).not.toMatch(/\b(?:Set|New|Remove|Start|Stop|Invoke)-(?!StrictMode)\w+/)
     expect(source).toContain('mutationAttempted = $false')
   })
 })

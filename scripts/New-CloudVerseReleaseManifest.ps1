@@ -14,4 +14,5 @@ foreach ($name in @('Discover-Scvmm.ps1','Collect-ScvmmInventory.ps1','Collect-H
   if ($signature.Status -ne 'Valid' -or $ApprovedSignerThumbprint -notcontains $signature.SignerCertificate.Thumbprint) { throw "Operational script $name is not signed by an approved certificate" }
   $scripts[$name] = [ordered]@{ sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant(); signerThumbprints = @($signature.SignerCertificate.Thumbprint.ToUpperInvariant()) }
 }
-[ordered]@{ schemaVersion = 1; catalogVersion = '1.0'; scripts = $scripts } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $OutputPath -Encoding utf8NoBOM
+$json = [ordered]@{ schemaVersion = 1; catalogVersion = '1.0'; scripts = $scripts } | ConvertTo-Json -Depth 6
+[IO.File]::WriteAllText([IO.Path]::GetFullPath($OutputPath), $json + "`n", [Text.UTF8Encoding]::new($false))

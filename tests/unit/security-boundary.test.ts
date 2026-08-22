@@ -60,6 +60,9 @@ describe('C24 Windows collector security boundary', () => {
 
   it('verifies digest and approved Authenticode signer before fixed argument-array execution', async () => {
     const { runner, executor, directory } = await harness(); await runner.initialize()
+    const signatureProbe = executor.mock.calls.find(([, args]) => args.some((item) => item.includes('Get-AuthenticodeSignature')))![1]
+    expect(signatureProbe).toHaveLength(7)
+    expect(signatureProbe.at(-1)).toContain(`-LiteralPath '${await realpath(resolve(directory, 'Discover-Scvmm.ps1'))}'`)
     await expect(runner.runScvmmDiscovery({ server: 'vmm01.example.com', port: 8100 })).resolves.toMatchObject({ requestedRole: 'ReadOnlyAdmin' })
     expect(executor).toHaveBeenCalledTimes(6)
     const [file, args] = executor.mock.calls[5]

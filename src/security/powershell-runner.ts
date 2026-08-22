@@ -10,7 +10,7 @@ import { redactWindowsCollectorError } from './redaction.js'
 const execFileAsync = promisify(execFile)
 const FIXED_POWERSHELL_ARGUMENTS = Object.freeze(['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'AllSigned'])
 const WINDOWS_POWERSHELL_PATH = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
-const AUTHENTICODE_PROBE = "$s=Get-AuthenticodeSignature -LiteralPath $args[0]; [pscustomobject]@{Status=[string]$s.Status;Thumbprint=[string]$s.SignerCertificate.Thumbprint}|ConvertTo-Json -Compress"
+const authenticodeProbe = (path: string) => `$s=Get-AuthenticodeSignature -LiteralPath '${path.replace(/'/g, "''")}'; [pscustomobject]@{Status=[string]$s.Status;Thumbprint=[string]$s.SignerCertificate.Thumbprint}|ConvertTo-Json -Compress`
 const LANGUAGE_MODE_PROBE = '[string]$ExecutionContext.SessionState.LanguageMode'
 const JEA_LANGUAGE_MODE_PROBE = 'Get-CloudVerseExecutionBoundary'
 
@@ -123,7 +123,7 @@ export class ConstrainedPowerShellRunner {
     if (!expected) throw new Error(`Release manifest omits ${operationId}`)
     const digest = createHash('sha256').update(bytes).digest('hex')
     if (digest !== expected.sha256.toLowerCase()) throw new Error(`Script digest mismatch for ${operationId}`)
-    const result = await this.executor(this.powershellPath, [...FIXED_POWERSHELL_ARGUMENTS, '-Command', AUTHENTICODE_PROBE, scriptPath], { timeout: 30_000, maxBuffer: 64 * 1024, windowsHide: true })
+    const result = await this.executor(this.powershellPath, [...FIXED_POWERSHELL_ARGUMENTS, '-Command', authenticodeProbe(scriptPath)], { timeout: 30_000, maxBuffer: 64 * 1024, windowsHide: true })
     const signature = JSON.parse(result.stdout) as { Status?: string; Thumbprint?: string }
     const thumbprint = String(signature.Thumbprint ?? '').replace(/\s/g, '').toUpperCase()
     if (signature.Status !== 'Valid' || !expected.signerThumbprints.map((item) => item.toUpperCase()).includes(thumbprint)) throw new Error(`Authenticode verification failed for ${operationId}`)

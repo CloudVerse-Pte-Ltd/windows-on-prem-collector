@@ -10,7 +10,7 @@ async function load(overrides: Record<string, unknown> = {}) {
   const path = join(directory, 'collector.config.json')
   await writeFile(path, JSON.stringify({
     stateDirectory: 'state', spoolDirectory: 'spool', scriptsDirectory: 'scripts', manifestPath: 'release-manifest.json',
-    managementPlaneUid: 'hyperv:11111111-1111-4111-8111-111111111111', mode: 'LOCAL_HYPERV', intervalSeconds: 60, maxSpoolBytes: 1024, maxSpoolItems: 10,
+    managementPlaneUid: 'hyperv:11111111-1111-4111-8111-111111111111', mode: 'LOCAL_HYPERV', scaleClass: 'S', intervalSeconds: 60, maxSpoolBytes: 1024, maxSpoolItems: 10,
     offlineExportDirectory: 'export', executionBoundary: { kind: 'JEA', endpointName: 'CloudVerseCollector' }, ...overrides,
   }))
   return loadWindowsCollectorConfig(path)
@@ -34,6 +34,8 @@ describe('Windows collector execution-boundary configuration', () => {
   })
   it('rejects invalid spool bounds, missing paths, and empty upload allowlists', async () => {
     await expect(load({ maxSpoolBytes: 0 })).rejects.toThrow('Positive spool bounds')
+    await expect(load({ scaleClass: undefined })).rejects.toThrow('scaleClass must be S, M, L or XL')
+    await expect(load({ scaleClass: 'S', maxSpoolBytes: 10 * 1_073_741_824 + 1 })).rejects.toThrow('ratified S scale-class ceiling')
     await expect(load({ stateDirectory: '' })).rejects.toThrow('stateDirectory is required')
     await expect(load({ offlineExportDirectory: undefined, upload: { endpoint: 'https://cpd.example.test', allowedHosts: [] } })).rejects.toThrow('allowedHosts')
   })

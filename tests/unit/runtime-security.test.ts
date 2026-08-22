@@ -64,7 +64,7 @@ describe('Windows collector runtime security', () => {
   })
 
   it('persists a redacted collection gap, retries, and recovers without emitting a failed-cycle bundle', async () => {
-    const config: WindowsCollectorConfig = { stateDirectory: 'state', spoolDirectory: 'spool', scriptsDirectory: 'scripts', manifestPath: 'manifest', managementPlaneUid: 'hyperv:018f6e32-4f14-7c1f-aab2-90a7ac957011', mode: 'LOCAL_HYPERV', executionBoundary: { kind: 'JEA', endpointName: 'CloudVerseCollector' }, intervalSeconds: 60, maxSpoolBytes: 1_000_000, maxSpoolItems: 10, offlineExportDirectory: 'export' }
+    const config: WindowsCollectorConfig = { stateDirectory: 'state', spoolDirectory: 'spool', scriptsDirectory: 'scripts', manifestPath: 'manifest', managementPlaneUid: 'hyperv:018f6e32-4f14-7c1f-aab2-90a7ac957011', mode: 'LOCAL_HYPERV', scaleClass: 'S', executionBoundary: { kind: 'JEA', endpointName: 'CloudVerseCollector' }, intervalSeconds: 60, maxSpoolBytes: 1_000_000, maxSpoolItems: 10, offlineExportDirectory: 'export' }
     const runner = { initialize: vi.fn(async () => undefined) } as any
     const writes: CollectorRuntimeHealth[] = []; const healthStore = { path: 'health', read: vi.fn(async () => undefined), write: vi.fn(async (health: CollectorRuntimeHealth) => { writes.push(structuredClone(health)) }) } as any
     const controller = new AbortController(); let delays = 0
@@ -87,7 +87,7 @@ describe('Windows collector runtime security', () => {
 
   it('validates the signed execution boundary and reports upgrade compatibility without collecting', async () => {
     const runner = { initialize: vi.fn(async () => undefined) } as any; const collect = vi.fn()
-    const runtime = new WindowsCollectorRuntime({ stateDirectory: 'state', spoolDirectory: 'spool', scriptsDirectory: 'scripts', manifestPath: 'manifest', managementPlaneUid: 'hyperv:018f6e32-4f14-7c1f-aab2-90a7ac957011', mode: 'LOCAL_HYPERV', executionBoundary: { kind: 'JEA', endpointName: 'CloudVerseCollector' }, intervalSeconds: 60, maxSpoolBytes: 1_000_000, maxSpoolItems: 10, offlineExportDirectory: 'export' }, runner, { acceptedSchemas: () => ['1.0', '0.9'], enqueue: collect } as any, {} as any, {} as any)
+    const runtime = new WindowsCollectorRuntime({ stateDirectory: 'state', spoolDirectory: 'spool', scriptsDirectory: 'scripts', manifestPath: 'manifest', managementPlaneUid: 'hyperv:018f6e32-4f14-7c1f-aab2-90a7ac957011', mode: 'LOCAL_HYPERV', scaleClass: 'S', executionBoundary: { kind: 'JEA', endpointName: 'CloudVerseCollector' }, intervalSeconds: 60, maxSpoolBytes: 1_000_000, maxSpoolItems: 10, offlineExportDirectory: 'export' }, runner, { acceptedSchemas: () => ['1.0', '0.9'], enqueue: collect } as any, {} as any, {} as any)
     await expect(runtime.validate()).resolves.toEqual({ valid: true, mode: 'LOCAL_HYPERV', managementPlaneUid: 'hyperv:018f6e32-4f14-7c1f-aab2-90a7ac957011', acceptedBundleSchemas: ['1.0', '0.9'] })
     expect(runner.initialize).toHaveBeenCalledOnce(); expect(collect).not.toHaveBeenCalled()
   })

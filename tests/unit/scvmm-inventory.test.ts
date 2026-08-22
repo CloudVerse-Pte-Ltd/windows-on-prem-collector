@@ -39,7 +39,7 @@ describe('C25 SCVMM inventory normalization', () => {
     const inventoryEnvelope = toHypervInventoryEnvelope(1, `scvmm:${id(9999)}`, inventory)
     const telemetryEnvelope = toHypervTelemetryEnvelope(1, `scvmm:${id(9999)}`, context.collectedAt, [], [{ code: 'HOST_LEVEL_PERFORMANCE_COLLECTOR_REQUIRED' }])
     const { privateKey } = generateKeyPairSync('ed25519'); const signer = new WindowsBundleSigner(privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(), { orgId: 1, collectorId: 'scale-fixture', signatureKeyId: 'scale-key' })
-    const bundle = signer.create(context.collectionRunId, toHypervCollectionPayload(inventoryEnvelope, telemetryEnvelope), new Date(context.collectedAt))
+    const bundle = signer.create(context.collectionRunId, toHypervCollectionPayload(inventoryEnvelope, telemetryEnvelope, 'M'), new Date(context.collectedAt))
     expect(bundle.signature).toMatch(/^[A-Za-z0-9+/]+=*$/); expect(performance.now() - started).toBeLessThan(30_000)
   })
 })

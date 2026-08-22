@@ -55,7 +55,7 @@ export interface HypervCollectionPayload {
   records: [HypervInventoryEnvelope, HypervTelemetryEnvelope]
   completion: {
     status: 'SUCCEEDED' | 'PARTIAL'
-    recordCounts: { assets: number; metrics: number; gaps: number; errors: number }
+    recordCounts: { assets: number; metrics: number; gaps: number; errors: number; scaleClass: 'S' | 'M' | 'L' | 'XL' }
     coverage: { inventory: 'COMPLETE'; telemetry: 'COMPLETE' | 'PARTIAL'; reducedCoverage: boolean }
     errors: Array<Record<string, unknown>>
   }
@@ -81,14 +81,15 @@ export function toHypervTelemetryEnvelope(integrationId: number, managementPlane
   }
 }
 
-export function toHypervCollectionPayload(inventory: HypervInventoryEnvelope, telemetry: HypervTelemetryEnvelope): HypervCollectionPayload {
+export function toHypervCollectionPayload(inventory: HypervInventoryEnvelope, telemetry: HypervTelemetryEnvelope, scaleClass: 'S' | 'M' | 'L' | 'XL'): HypervCollectionPayload {
   if (inventory.integrationId !== telemetry.integrationId || inventory.managementPlaneUid.toLowerCase() !== telemetry.managementPlaneUid.toLowerCase()) throw new Error('Hyper-V inventory and telemetry scope must match')
+  if (!['S', 'M', 'L', 'XL'].includes(scaleClass)) throw new Error('Hyper-V collection requires a ratified scale class')
   const errors = telemetry.gaps.map((gap) => ({ code: gap.reasonClass, semanticMetric: gap.semanticMetric, retryable: gap.retryable }))
   return {
     records: [inventory, telemetry],
     completion: {
       status: telemetry.gaps.length ? 'PARTIAL' : 'SUCCEEDED',
-      recordCounts: { assets: inventory.records.length, metrics: telemetry.metrics.length, gaps: telemetry.gaps.length, errors: errors.length },
+      recordCounts: { assets: inventory.records.length, metrics: telemetry.metrics.length, gaps: telemetry.gaps.length, errors: errors.length, scaleClass },
       coverage: { inventory: 'COMPLETE', telemetry: telemetry.gaps.length ? 'PARTIAL' : 'COMPLETE', reducedCoverage: inventory.reducedCoverage },
       errors,
     },

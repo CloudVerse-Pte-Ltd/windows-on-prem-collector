@@ -28,8 +28,8 @@ describe('C27 Hyper-V canonical envelope', () => {
       vmUid: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', vmName: 'renamed', metricKey: 'guest.memory.assigned.bytes', timestamp: '2026-08-21T00:00:01Z', value: 536870912, unit: 'bytes', provenance: { instanceName: 'renamed', counterPath: '\\counter' },
     }], [])
     expect(telemetry.metrics[0]).toMatchObject({ sourceUid: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', nativeMetric: 'hyperv.dynamic_memory.physical_memory', value: '536870912', retentionDays: 90 })
-    expect(toHypervCollectionPayload(toHypervInventoryEnvelope(7, 'hyperv:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', cim), telemetry)).toMatchObject({
-      completion: { status: 'SUCCEEDED', recordCounts: { assets: 1, metrics: 1, gaps: 0, errors: 0 }, coverage: { inventory: 'COMPLETE', telemetry: 'COMPLETE', reducedCoverage: true } },
+    expect(toHypervCollectionPayload(toHypervInventoryEnvelope(7, 'hyperv:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', cim), telemetry, 'S')).toMatchObject({
+      completion: { status: 'SUCCEEDED', recordCounts: { assets: 1, metrics: 1, gaps: 0, errors: 0, scaleClass: 'S' }, coverage: { inventory: 'COMPLETE', telemetry: 'COMPLETE', reducedCoverage: true } },
     })
   })
 
@@ -37,6 +37,6 @@ describe('C27 Hyper-V canonical envelope', () => {
     const cim = { ...inventory, reducedCoverage: true as const, capabilities: {}, provenance: { connectorId: 'cloudverse.hyperv.cim-v2' as const, connectorVersion: '0.1.0', collectionRunId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', collectedAt: '2026-08-21T00:00:00Z', transport: 'LOCAL_CIM_V2' as const } }
     const graph = toHypervInventoryEnvelope(7, 'hyperv:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', cim)
     const telemetry = toHypervTelemetryEnvelope(7, 'hyperv:dddddddd-dddd-4ddd-8ddd-dddddddddddd', '2026-08-21T00:00:01Z', [], [])
-    expect(() => toHypervCollectionPayload(graph, telemetry)).toThrow('scope must match')
+    expect(() => toHypervCollectionPayload(graph, telemetry, 'S')).toThrow('scope must match')
   })
 })

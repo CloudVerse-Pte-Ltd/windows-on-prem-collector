@@ -82,6 +82,12 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
   if ($stateDirectory.Equals($spoolDirectory, [StringComparison]::OrdinalIgnoreCase)) { throw 'stateDirectory and spoolDirectory must be distinct' }
   $dataDirectories = @($stateDirectory, $spoolDirectory)
   if ($configuration.offlineExportDirectory) { $dataDirectories += Resolve-CloudVerseDataDirectory -Label 'offlineExportDirectory' -Value ([string]$configuration.offlineExportDirectory) -CodeDirectory $InstallDirectory }
+  if ($configuration.upload -and $configuration.upload.proxy) {
+    if ([string]::IsNullOrWhiteSpace([string]$configuration.upload.proxy.authorizationFile) -or -not [IO.Path]::IsPathRooted([string]$configuration.upload.proxy.authorizationFile)) { throw 'Proxy authorizationFile must be an absolute path inside stateDirectory' }
+    $proxyAuthorizationFile = [IO.Path]::GetFullPath([string]$configuration.upload.proxy.authorizationFile)
+    if (-not $proxyAuthorizationFile.StartsWith($stateDirectory.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Proxy authorizationFile must be inside stateDirectory' }
+    if (-not (Test-Path $proxyAuthorizationFile -PathType Leaf)) { throw 'Proxy authorizationFile is missing' }
+  }
   for ($left = 0; $left -lt $dataDirectories.Count; $left++) {
     for ($right = $left + 1; $right -lt $dataDirectories.Count; $right++) {
       $a = $dataDirectories[$left].TrimEnd('\'); $b = $dataDirectories[$right].TrimEnd('\')

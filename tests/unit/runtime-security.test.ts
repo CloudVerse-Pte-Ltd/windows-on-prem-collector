@@ -108,6 +108,25 @@ describe('Windows collector runtime security', () => {
     expect(await spool.usage()).toMatchObject({ items: 0 }); expect(await uploader.health()).toMatchObject({ healthy: true, lastError: null })
   })
 
+  it('uses an allowlisted authenticated HTTPS proxy without exposing its authorization', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cv-win-proxy-')); const spool = new EncryptedWindowsSpool({ directory, key: Buffer.alloc(32, 4), maxBytes: 1_000_000, maxItems: 10, acceptedSchemaVersions: ['1.0'] })
+    await spool.enqueue('bundle-proxy', '1.0', Buffer.from('signed-envelope'))
+    const resolver = vi.fn(async (hostname: string) => hostname === 'proxy.example.test' ? ['8.8.4.4'] : ['8.8.8.8'])
+    const sender = vi.fn(async (_url: any, init: any) => { expect(init.dispatcher).toBeDefined(); expect(JSON.stringify(init.headers)).not.toContain('proxy-secret'); return new Response(null, { status: 202 }) }) as any
+    const uploader = new WindowsSpoolUploader(spool, { endpoint: 'https://ingest.example.test/bundles', allowedHosts: ['ingest.example.test'], bearerToken: 'transport-token', proxy: { endpoint: 'https://proxy.example.test:8443', allowedHosts: ['proxy.example.test'], authorization: 'Bearer proxy-secret' } }, resolver, sender)
+    await expect(uploader.flushOnce(new Date(Date.now() + 1_000))).resolves.toMatchObject({ sent: 1, deferred: 0 })
+    expect(resolver).toHaveBeenCalledWith('ingest.example.test'); expect(resolver).toHaveBeenCalledWith('proxy.example.test')
+  })
+
+  it('defers bundles when an authenticated proxy resolves outside its approved address policy', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cv-win-proxy-denied-')); const spool = new EncryptedWindowsSpool({ directory, key: Buffer.alloc(32, 3), maxBytes: 1_000_000, maxItems: 10, acceptedSchemaVersions: ['1.0'] })
+    await spool.enqueue('bundle-proxy-denied', '1.0', Buffer.from('signed-envelope'))
+    const sender = vi.fn() as any
+    const uploader = new WindowsSpoolUploader(spool, { endpoint: 'https://ingest.example.test', allowedHosts: ['ingest.example.test'], bearerToken: 'transport-token', proxy: { endpoint: 'https://proxy.example.test', allowedHosts: ['proxy.example.test'], authorization: 'Basic cHJveHktc2VjcmV0' } }, async (hostname) => hostname === 'proxy.example.test' ? ['10.0.0.8'] : ['8.8.8.8'], sender)
+    await expect(uploader.flushOnce(new Date(Date.now() + 1_000))).resolves.toMatchObject({ sent: 0, deferred: 1 })
+    expect(sender).not.toHaveBeenCalled(); expect(await spool.usage()).toMatchObject({ items: 1 })
+  })
+
   it.each(['10.0.0.1', '100.64.0.1', '127.0.0.1', '169.254.1.1', '192.0.2.1', '198.51.100.1', '203.0.113.1', '224.0.0.1', '::1', 'fc00::1', 'fe80::1', '2001:db8::1', '::ffff:127.0.0.1'])(
     'rejects prohibited upload address %s without losing the bundle', async (address) => {
       const directory = await mkdtemp(join(tmpdir(), 'cv-win-ssrf-')); const spool = new EncryptedWindowsSpool({ directory, key: Buffer.alloc(32, 5), maxBytes: 1_000_000, maxItems: 10, acceptedSchemaVersions: ['1.0'] })

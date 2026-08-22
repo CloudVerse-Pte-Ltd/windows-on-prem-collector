@@ -13,6 +13,7 @@ The collector is an outbound-only Windows service. It has no listener, interacti
 | Excess SCVMM privilege | Dedicated `ReadOnlyAdmin` scope; discovery records visible role and bounded host-read probe. Mutation commands are absent and AST policy rejects them. |
 | Telemetry misattribution | SCVMM inventory and host-level performance evidence remain separate. Native Hyper-V counters run only on the host collector; an SCVMM-only worker emits a typed gap and never treats its own counters or VMM summaries as host evidence. |
 | Credential theft | SCVMM JEA runs as the least-privilege domain gMSA required for network authentication; local Hyper-V JEA uses an ephemeral virtual account. No password CLI argument, output, bundle, transcript or config export. Redaction is defense in depth. |
+| Proxy credential or routing abuse | Authenticated proxy mode requires credential-free HTTPS URLs, a separate exact-host/DNS/private-address allowlist, and an authorization file under the ACL-protected state directory. Proxy secrets are never accepted in ordinary configuration or URLs. |
 | Lateral movement | Exact SCVMM host/port and CPD HTTPS egress; no inbound rule; service account denied interactive logon; no arbitrary remoting. |
 | Replay/tenant substitution | C06 tenant-bound Ed25519 envelope, bundle/nonce replay ledger and quarantine. |
 | Transport-token theft | Generate the 256-bit token inside the collector boundary, store it in the service credential file, and enroll only its lowercase SHA-256 hash. CPD requires both this bearer proof and the Ed25519 signature. |

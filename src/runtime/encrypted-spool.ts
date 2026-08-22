@@ -3,12 +3,13 @@ import { lookup } from 'node:dns/promises'
 import { mkdir, open, readFile, readdir, rename, stat, unlink } from 'node:fs/promises'
 import { isIP } from 'node:net'
 import { join } from 'node:path'
-import { Agent, fetch as undiciFetch } from 'undici'
+import { Agent, Pool, ProxyAgent, fetch as undiciFetch, type Dispatcher } from 'undici'
 import { redactWindowsCollectorError } from '../security/redaction.js'
 
 interface Item { queueId: string; bundleId: string; schemaVersion: string; createdAt: string; attempts: number; nextAttemptAt: string; payload: Buffer; lastError?: string }
 type Resolver = (hostname: string) => Promise<string[]>
 type Sender = typeof undiciFetch
+export interface WindowsProxyConfig { endpoint: string; allowedHosts: string[]; privateAddressAllowedHosts?: string[]; authorization: string }
 const privateAddress = (address: string): boolean => {
   const value = address.toLowerCase()
   if (value === '::' || value === '::1' || value.startsWith('fc') || value.startsWith('fd') || /^fe[89ab]/.test(value) || value.startsWith('ff') || value.startsWith('2001:db8:')) return true
@@ -41,7 +42,7 @@ export class EncryptedWindowsSpool {
 
 export class WindowsSpoolUploader {
   private lastError: string | null = null; private lastSuccessAt: string | null = null
-  constructor(private readonly spool: EncryptedWindowsSpool, private readonly config: { endpoint: string; allowedHosts: string[]; privateAddressAllowedHosts?: string[]; bearerToken: string }, private readonly resolver: Resolver = defaultResolver, private readonly sender: Sender = undiciFetch) {}
+  constructor(private readonly spool: EncryptedWindowsSpool, private readonly config: { endpoint: string; allowedHosts: string[]; privateAddressAllowedHosts?: string[]; bearerToken: string; proxy?: WindowsProxyConfig }, private readonly resolver: Resolver = defaultResolver, private readonly sender: Sender = undiciFetch) {}
   async flushOnce(now = new Date()) {
     const items = await this.spool.list(); let sent = 0; let deferred = 0; let incompatible = 0
     let url: URL; let addresses: string[]
@@ -56,7 +57,23 @@ export class WindowsSpoolUploader {
       this.lastError = message
       return { examined: items.length, sent, deferred, incompatible }
     }
-    const agent = new Agent({ connect: { lookup: lookupPinned(addresses) } })
+    let agent: Dispatcher
+    if (this.config.proxy) {
+      let proxyUrl: URL; let proxyAddresses: string[]
+      try {
+        proxyUrl = new URL(this.config.proxy.endpoint)
+        if (proxyUrl.protocol !== 'https:' || proxyUrl.username || proxyUrl.password || !this.config.proxy.allowedHosts.map((x) => x.toLowerCase()).includes(proxyUrl.hostname.toLowerCase())) throw new Error('Proxy endpoint is not approved credential-free HTTPS')
+        if (!/^(Basic|Bearer) [A-Za-z0-9+/_=.~-]+$/.test(this.config.proxy.authorization)) throw new Error('Proxy authorization value is invalid')
+        proxyAddresses = await this.resolver(proxyUrl.hostname)
+        if (!proxyAddresses.length || (proxyAddresses.some(privateAddress) && !(this.config.proxy.privateAddressAllowedHosts ?? []).map((x) => x.toLowerCase()).includes(proxyUrl.hostname.toLowerCase()))) throw new Error('Proxy endpoint resolved to a prohibited address')
+      } catch (error) {
+        const message = redactWindowsCollectorError(error)
+        for (const item of items) { if (!this.spool.accepts(item.schemaVersion)) { incompatible++; continue }; if (new Date(item.nextAttemptAt) > now) { deferred++; continue }; await this.defer(item, now, message); deferred++ }
+        this.lastError = message
+        return { examined: items.length, sent, deferred, incompatible }
+      }
+      agent = new ProxyAgent({ uri: proxyUrl.toString(), token: this.config.proxy.authorization, clientFactory: (origin, options) => new Pool(origin, { ...options, connect: { ...((options as any).connect ?? {}), lookup: lookupPinned(proxyAddresses) } }) })
+    } else agent = new Agent({ connect: { lookup: lookupPinned(addresses) } })
     try { for (const item of items) { if (!this.spool.accepts(item.schemaVersion)) { incompatible++; continue }; if (new Date(item.nextAttemptAt) > now) { deferred++; continue }; try { const response = await this.sender(url, { method: 'POST', dispatcher: agent, headers: { 'content-type': 'application/json', authorization: `Bearer ${this.config.bearerToken}`, 'x-bundle-id': item.bundleId, 'x-bundle-schema-version': item.schemaVersion }, body: item.payload }); if (!response.ok) throw new Error(`Upload returned HTTP ${response.status}`); await this.spool.remove(item.queueId); sent++; this.lastError = null; this.lastSuccessAt = now.toISOString() } catch (error) { await this.defer(item, now, redactWindowsCollectorError(error)); deferred++; this.lastError = item.lastError ?? 'Collector upload failed' } } } finally { await agent.close() }
     return { examined: items.length, sent, deferred, incompatible }
   }

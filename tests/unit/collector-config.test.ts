@@ -37,4 +37,10 @@ describe('Windows collector execution-boundary configuration', () => {
     await expect(load({ stateDirectory: '' })).rejects.toThrow('stateDirectory is required')
     await expect(load({ offlineExportDirectory: undefined, upload: { endpoint: 'https://cpd.example.test', allowedHosts: [] } })).rejects.toThrow('allowedHosts')
   })
+  it('requires an explicit proxy allowlist and protected authorization-file reference', async () => {
+    const upload = { endpoint: 'https://cpd.example.test', allowedHosts: ['cpd.example.test'] }
+    await expect(load({ offlineExportDirectory: undefined, upload: { ...upload, proxy: { endpoint: 'https://proxy.example.test', allowedHosts: [], authorizationFile: 'proxy-auth' } } })).rejects.toThrow('Proxy allowedHosts')
+    await expect(load({ offlineExportDirectory: undefined, upload: { ...upload, proxy: { endpoint: 'https://proxy.example.test', allowedHosts: ['proxy.example.test'], authorizationFile: '' } } })).rejects.toThrow('Proxy allowedHosts')
+    await expect(load({ offlineExportDirectory: undefined, upload: { ...upload, proxy: { endpoint: 'https://proxy.example.test', allowedHosts: ['proxy.example.test'], authorizationFile: 'proxy-auth' } } })).resolves.toMatchObject({ upload: { proxy: { authorizationFile: 'proxy-auth' } } })
+  })
 })

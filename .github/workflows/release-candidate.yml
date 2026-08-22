@@ -14,12 +14,11 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - run: npm prune --omit=dev
       - name: Generate SPDX dependency SBOM
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $sbom = npm sbom --sbom-format spdx | Out-String
+          $sbom = npm sbom --omit=dev --sbom-format spdx | Out-String
           if ($LASTEXITCODE -ne 0) { throw 'npm sbom failed' }
           [IO.File]::WriteAllText(
             (Join-Path $PWD 'cloudverse-windows-collector.spdx.json'),
@@ -27,6 +26,7 @@ jobs:
             [Text.UTF8Encoding]::new($false)
           )
           if ((Get-Item cloudverse-windows-collector.spdx.json).Length -lt 100) { throw 'SPDX SBOM is empty' }
+      - run: npm prune --omit=dev
       - name: Assemble non-installable signing candidate
         shell: powershell
         run: |

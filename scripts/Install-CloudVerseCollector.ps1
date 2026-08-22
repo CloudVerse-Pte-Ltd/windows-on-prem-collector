@@ -118,7 +118,10 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
     & (Join-Path $InstallDirectory 'scripts\Install-CloudVerseJea.ps1') -InstallDirectory $InstallDirectory -ServiceAccount $effectiveServiceAccount -EndpointName ([string]$configuration.executionBoundary.endpointName) -CollectorMode ([string]$configuration.mode)
   }
   $action = New-ScheduledTaskAction -Execute (Join-Path $InstallDirectory 'node.exe') -Argument 'dist/src/runtime/cli.js run collector.config.json' -WorkingDirectory $InstallDirectory
-  $validationAction = New-ScheduledTaskAction -Execute (Join-Path $InstallDirectory 'node.exe') -Argument 'dist/src/runtime/cli.js validate collector.config.json' -WorkingDirectory $InstallDirectory
+  $validationStdout = Join-Path $stateDirectory 'upgrade-validation.stdout.log'
+  $validationStderr = Join-Path $stateDirectory 'upgrade-validation.stderr.log'
+  $validationCommand = '"{0}" dist/src/runtime/cli.js validate collector.config.json 1>"{1}" 2>"{2}"' -f (Join-Path $InstallDirectory 'node.exe'), $validationStdout, $validationStderr
+  $validationAction = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\cmd.exe" -Argument ('/d /s /c "{0}"' -f $validationCommand) -WorkingDirectory $InstallDirectory
   $trigger = New-ScheduledTaskTrigger -AtStartup
   $settings = New-ScheduledTaskSettingsSet -RestartCount 10 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
   if ($taskPassword) {

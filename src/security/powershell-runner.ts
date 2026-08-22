@@ -55,16 +55,22 @@ export class ConstrainedPowerShellRunner {
   async runScvmmInventory(parameters: unknown) {
     const families = ['hostGroups', 'clusters', 'hosts', 'virtualMachines', 'templates', 'checkpoints', 'storageArrays', 'storagePools', 'logicalNetworks', 'vmNetworks'] as const
     const combined: Record<string, unknown> = {}; for (const family of families) combined[family] = []
+    let expectedVirtualMachines: number | undefined
     for (let pageNumber = 0; pageNumber <= 50; pageNumber++) {
       const page = await this.runScvmmOperation('scvmm.inventory.v1', parameters, ['-PageNumber', String(pageNumber), '-PageSize', '2000']) as Record<string, unknown>
       const metadata = page.page as Record<string, unknown> | undefined
-      if (!metadata || metadata.number !== pageNumber || metadata.size !== 2000 || typeof metadata.hasMore !== 'boolean') throw new Error('SCVMM inventory page metadata is invalid')
+      if (!metadata || metadata.number !== pageNumber || metadata.size !== 2000 || typeof metadata.hasMore !== 'boolean' || !Number.isSafeInteger(metadata.totalVirtualMachines) || Number(metadata.totalVirtualMachines) < 0 || Number(metadata.totalVirtualMachines) > 100_000) throw new Error('SCVMM inventory page metadata is invalid')
+      if (expectedVirtualMachines === undefined) expectedVirtualMachines = Number(metadata.totalVirtualMachines)
+      else if (metadata.totalVirtualMachines !== expectedVirtualMachines) throw new Error('SCVMM inventory changed cardinality during paged collection')
       for (const family of families) {
         if (!Array.isArray(page[family])) throw new Error(`SCVMM inventory page ${family} is invalid`)
         ;(combined[family] as unknown[]).push(...page[family] as unknown[])
       }
       for (const field of ['schemaVersion', 'capability', 'platform', 'mutationAttempted']) if (pageNumber === 0) combined[field] = page[field]; else if (page[field] !== combined[field]) throw new Error('SCVMM inventory page contract changed during collection')
-      if (!metadata.hasMore) return combined
+      if (!metadata.hasMore) {
+        if ((combined.virtualMachines as unknown[]).length !== expectedVirtualMachines) throw new Error('SCVMM inventory page count does not conserve the reported total')
+        return combined
+      }
     }
     throw new Error('SCVMM inventory exceeded the 100,000-VM page bound')
   }

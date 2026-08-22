@@ -29,7 +29,7 @@ jobs:
         run: |
           $allowed = @('ConvertTo-Json','Get-SCVMMServer','Get-SCUserRole','Get-SCVMHost','Import-Module','Select-Object','Set-StrictMode')
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Discover-Scvmm.ps1 -AllowedCommand $allowed
-          $inventoryAllowed = @('ConvertTo-Json','Get-SCLogicalNetwork','Get-SCStorageArray','Get-SCStoragePool','Get-SCVirtualMachine','Get-SCVMCheckpoint','Get-SCVMHost','Get-SCVMHostCluster','Get-SCVMHostGroup','Get-SCVMNetwork','Get-SCVMTemplate','Get-SCVMMServer','Import-Module','Select-Object','Set-StrictMode')
+          $inventoryAllowed = @('ConvertTo-Json','Get-SCLogicalNetwork','Get-SCStorageArray','Get-SCStoragePool','Get-SCVirtualMachine','Get-SCVMCheckpoint','Get-SCVMHost','Get-SCVMHostCluster','Get-SCVMHostGroup','Get-SCVMNetwork','Get-SCVMTemplate','Get-SCVMMServer','Import-Module','Select-Object','Set-StrictMode','Sort-Object')
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-ScvmmInventory.ps1 -AllowedCommand $inventoryAllowed
           $cimAllowed = @('ConvertTo-Json','Copy-CloudVerseProperties','Get-CimInstance','Set-StrictMode')
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-HypervCimInventory.ps1 -AllowedCommand $cimAllowed

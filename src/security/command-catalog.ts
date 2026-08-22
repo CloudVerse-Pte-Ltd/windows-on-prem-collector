@@ -22,7 +22,7 @@ export const COMMAND_CATALOG = Object.freeze({
     allowedCommands: Object.freeze([
       'ConvertTo-Json', 'Get-SCLogicalNetwork', 'Get-SCStorageArray', 'Get-SCStoragePool', 'Get-SCVirtualMachine',
       'Get-SCVMCheckpoint', 'Get-SCVMHost', 'Get-SCVMHostCluster', 'Get-SCVMHostGroup', 'Get-SCVMNetwork',
-      'Get-SCVMTemplate', 'Get-SCVMMServer', 'Import-Module', 'Select-Object', 'Set-StrictMode',
+      'Get-SCVMTemplate', 'Get-SCVMMServer', 'Import-Module', 'Select-Object', 'Set-StrictMode', 'Sort-Object',
     ]),
     parameters: Object.freeze(['server', 'port']),
   }),

@@ -11,7 +11,8 @@ $ErrorActionPreference = 'Stop'
 Import-Module -Name VirtualMachineManager -ErrorAction Stop
 $vmm = Get-SCVMMServer -ComputerName $Server -TCPPort $Port -ConnectAs ReadOnlyAdmin -ErrorAction Stop
 $skip = $PageNumber * $PageSize
-$vmPage = @(Get-SCVirtualMachine -VMMServer $vmm | Select-Object -Skip $skip -First ($PageSize + 1) | Select-Object ID, Name, Status, VirtualizationPlatform, VMHost, HostGroup, HostCluster, CPUCount, Memory, DynamicMemoryEnabled, TotalSize, CreationTime)
+$allVirtualMachines = @(Get-SCVirtualMachine -VMMServer $vmm | Select-Object ID, Name, Status, VirtualizationPlatform, VMHost, HostGroup, HostCluster, CPUCount, Memory, DynamicMemoryEnabled, TotalSize, CreationTime | Sort-Object ID)
+$vmPage = @($allVirtualMachines | Select-Object -Skip $skip -First ($PageSize + 1))
 $hasMoreVirtualMachines = $vmPage.Count -gt $PageSize
 if ($hasMoreVirtualMachines) { $vmPage = @($vmPage[0..($PageSize - 1)]) }
 $hostGroups = @(); $clusters = @(); $hosts = @(); $templates = @(); $checkpoints = @(); $storageArrays = @(); $storagePools = @(); $logicalNetworks = @(); $vmNetworks = @()
@@ -29,7 +30,7 @@ if ($PageNumber -eq 0) {
 [pscustomobject]@{
     schemaVersion = '1.0'; capability = 'INVENTORY'; platform = 'HYPERV'; mutationAttempted = $false
     managementPlane = [pscustomobject]@{ name = [string]$vmm.Name; version = [string]$vmm.ProductVersion; port = $Port }
-    page = [pscustomobject]@{ number = $PageNumber; size = $PageSize; hasMore = $hasMoreVirtualMachines }
+    page = [pscustomobject]@{ number = $PageNumber; size = $PageSize; totalVirtualMachines = $allVirtualMachines.Count; hasMore = $hasMoreVirtualMachines }
     hostGroups = $hostGroups; clusters = $clusters; hosts = $hosts; virtualMachines = $vmPage; templates = $templates; checkpoints = $checkpoints
     storageArrays = $storageArrays; storagePools = $storagePools; logicalNetworks = $logicalNetworks; vmNetworks = $vmNetworks
 } | ConvertTo-Json -Depth 10 -Compress

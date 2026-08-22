@@ -97,12 +97,24 @@ describe('C24 Windows collector security boundary', () => {
     const empty = { hostGroups: [], clusters: [], hosts: [], templates: [], checkpoints: [], storageArrays: [], storagePools: [], logicalNetworks: [], vmNetworks: [] }
     const contract = { schemaVersion: '1.0', capability: 'INVENTORY', platform: 'HYPERV', mutationAttempted: false }
     const { runner, executor } = await harness({ inventoryPages: [
-      { ...contract, ...empty, virtualMachines: [{ ID: 'a' }], page: { number: 0, size: 2000, hasMore: true } },
-      { ...contract, ...empty, virtualMachines: [{ ID: 'b' }], page: { number: 1, size: 2000, hasMore: false } },
+      { ...contract, ...empty, virtualMachines: [{ ID: 'a' }], page: { number: 0, size: 2000, totalVirtualMachines: 2, hasMore: true } },
+      { ...contract, ...empty, virtualMachines: [{ ID: 'b' }], page: { number: 1, size: 2000, totalVirtualMachines: 2, hasMore: false } },
     ] }); await runner.initialize()
     await expect(runner.runScvmmInventory({ server: 'vmm01.example.com', port: 8100 })).resolves.toMatchObject({ virtualMachines: [{ ID: 'a' }, { ID: 'b' }] })
     const operations = executor.mock.calls.filter(([, args]) => args.includes('-PageNumber'))
     expect(operations).toHaveLength(2); expect(operations[0]![1]).toContain('0'); expect(operations[1]![1]).toContain('1')
+  })
+
+  it('fails closed when SCVMM cardinality drifts or final pages do not conserve the source total', async () => {
+    const empty = { hostGroups: [], clusters: [], hosts: [], templates: [], checkpoints: [], storageArrays: [], storagePools: [], logicalNetworks: [], vmNetworks: [] }
+    const contract = { schemaVersion: '1.0', capability: 'INVENTORY', platform: 'HYPERV', mutationAttempted: false }
+    const drift = await harness({ inventoryPages: [
+      { ...contract, ...empty, virtualMachines: [{ ID: 'a' }], page: { number: 0, size: 2000, totalVirtualMachines: 2, hasMore: true } },
+      { ...contract, ...empty, virtualMachines: [{ ID: 'b' }], page: { number: 1, size: 2000, totalVirtualMachines: 3, hasMore: false } },
+    ] }); await drift.runner.initialize()
+    await expect(drift.runner.runScvmmInventory({ server: 'vmm01.example.com', port: 8100 })).rejects.toThrow('changed cardinality')
+    const truncated = await harness({ inventoryPages: [{ ...contract, ...empty, virtualMachines: [{ ID: 'a' }], page: { number: 0, size: 2000, totalVirtualMachines: 2, hasMore: false } }] }); await truncated.runner.initialize()
+    await expect(truncated.runner.runScvmmInventory({ server: 'vmm01.example.com', port: 8100 })).rejects.toThrow('does not conserve')
   })
 
   it('rejects unsafe JEA endpoint names before process creation', async () => {

@@ -77,6 +77,29 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
     $secureTaskPassword = ConvertTo-SecureString $taskPassword -AsPlainText -Force
     New-LocalUser -Name $ServiceAccount -Password $secureTaskPassword -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword -Description 'CloudVerse Hyper-V collector identity' | Out-Null
     $effectiveServiceAccount = "$env:COMPUTERNAME\$ServiceAccount"
+    $serviceSid = ([Security.Principal.NTAccount]::new($effectiveServiceAccount)).Translate([Security.Principal.SecurityIdentifier]).Value
+    $policyPath = Join-Path $env:ProgramData "CloudVerse-batch-logon-$([Guid]::NewGuid().ToString('N')).inf"
+    $databasePath = [IO.Path]::ChangeExtension($policyPath, '.sdb')
+    try {
+      & "$env:SystemRoot\System32\secedit.exe" /export /cfg $policyPath /areas USER_RIGHTS /quiet
+      if ($LASTEXITCODE -ne 0) { throw 'Failed to export local user-rights policy' }
+      $lines = [Collections.Generic.List[string]]::new([IO.File]::ReadAllLines($policyPath, [Text.Encoding]::Unicode))
+      $rightIndex = -1
+      for ($index = 0; $index -lt $lines.Count; $index++) { if ($lines[$index] -match '^SeBatchLogonRight\s*=') { $rightIndex = $index; break } }
+      if ($rightIndex -ge 0) {
+        $assigned = @($lines[$rightIndex].Split('=', 2)[1].Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        if ($assigned -notcontains "*$serviceSid") { $lines[$rightIndex] = 'SeBatchLogonRight = ' + (($assigned + "*$serviceSid") -join ',') }
+      } else {
+        $privilegeIndex = $lines.IndexOf('[Privilege Rights]')
+        if ($privilegeIndex -lt 0) { throw 'Exported local policy omits the privilege-rights section' }
+        $lines.Insert($privilegeIndex + 1, "SeBatchLogonRight = *$serviceSid")
+      }
+      [IO.File]::WriteAllLines($policyPath, $lines, [Text.Encoding]::Unicode)
+      & "$env:SystemRoot\System32\secedit.exe" /configure /db $databasePath /cfg $policyPath /areas USER_RIGHTS /quiet
+      if ($LASTEXITCODE -ne 0) { throw 'Failed to grant the collector batch-logon right' }
+    } finally {
+      Remove-Item -LiteralPath $policyPath, $databasePath -Force -ErrorAction SilentlyContinue
+    }
   }
   if ($configuration.executionBoundary.kind -eq 'JEA') {
     if ([string]::IsNullOrWhiteSpace([string]$configuration.executionBoundary.endpointName)) { throw 'JEA endpoint name is required' }

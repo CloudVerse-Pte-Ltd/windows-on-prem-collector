@@ -11,7 +11,21 @@ import { statePaths, type WindowsCollectorIdentity } from './enrollment.js'
 import { WindowsBundleSigner } from './signed-bundle.js'
 
 export interface WindowsCollectorConfig { stateDirectory: string; spoolDirectory: string; scriptsDirectory: string; manifestPath: string; managementPlaneUid: string; mode: 'SCVMM' | 'LOCAL_HYPERV'; executionBoundary: { kind: 'JEA'; endpointName: string } | { kind: 'WDAC_APPLOCKER' }; scvmm?: { server: string; port: number }; upload?: { endpoint: string; allowedHosts: string[]; privateAddressAllowedHosts?: string[] }; intervalSeconds: number; maxSpoolBytes: number; maxSpoolItems: number; offlineExportDirectory?: string }
-export async function loadWindowsCollectorConfig(path: string): Promise<WindowsCollectorConfig> { const value = JSON.parse(await readFile(path, 'utf8')) as WindowsCollectorConfig; if (!['SCVMM', 'LOCAL_HYPERV'].includes(value.mode) || !Number.isSafeInteger(value.intervalSeconds) || value.intervalSeconds < 60) throw new Error('Collector mode or interval is invalid'); if (!value.executionBoundary || !['JEA', 'WDAC_APPLOCKER'].includes(value.executionBoundary.kind)) throw new Error('An explicit JEA or WDAC/AppLocker execution boundary is required'); if (value.executionBoundary.kind === 'JEA' && !/^[A-Za-z][A-Za-z0-9.-]{0,63}$/.test(value.executionBoundary.endpointName ?? '')) throw new Error('JEA endpoint name is invalid'); if (value.mode === 'SCVMM' && !value.scvmm) throw new Error('SCVMM configuration is required'); if (!value.upload && !value.offlineExportDirectory) throw new Error('Upload or offline export must be configured'); return value }
+export async function loadWindowsCollectorConfig(path: string): Promise<WindowsCollectorConfig> {
+  const value = JSON.parse(await readFile(path, 'utf8')) as WindowsCollectorConfig
+  if (!['SCVMM', 'LOCAL_HYPERV'].includes(value.mode) || !Number.isSafeInteger(value.intervalSeconds) || value.intervalSeconds < 60) throw new Error('Collector mode or interval is invalid')
+  if (!value.executionBoundary || !['JEA', 'WDAC_APPLOCKER'].includes(value.executionBoundary.kind)) throw new Error('An explicit JEA or WDAC/AppLocker execution boundary is required')
+  if (value.executionBoundary.kind === 'JEA' && !/^[A-Za-z][A-Za-z0-9.-]{0,63}$/.test(value.executionBoundary.endpointName ?? '')) throw new Error('JEA endpoint name is invalid')
+  const uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
+  const planePattern = new RegExp(`^${value.mode === 'SCVMM' ? 'scvmm' : 'hyperv'}:${uuid}$`, 'i')
+  if (!planePattern.test(value.managementPlaneUid ?? '')) throw new Error(`Collector mode requires an immutable ${value.mode === 'SCVMM' ? 'SCVMM' : 'Hyper-V host'} management-plane UUID`)
+  for (const [name, candidate] of Object.entries({ stateDirectory: value.stateDirectory, spoolDirectory: value.spoolDirectory, scriptsDirectory: value.scriptsDirectory, manifestPath: value.manifestPath })) if (typeof candidate !== 'string' || !candidate.trim()) throw new Error(`${name} is required`)
+  if (!Number.isSafeInteger(value.maxSpoolBytes) || value.maxSpoolBytes <= 0 || !Number.isSafeInteger(value.maxSpoolItems) || value.maxSpoolItems <= 0) throw new Error('Positive spool bounds are required')
+  if (value.mode === 'SCVMM' && (!value.scvmm || typeof value.scvmm.server !== 'string' || !value.scvmm.server.trim() || !Number.isSafeInteger(value.scvmm.port) || value.scvmm.port < 1 || value.scvmm.port > 65535)) throw new Error('SCVMM configuration is required')
+  if (!value.upload && !value.offlineExportDirectory) throw new Error('Upload or offline export must be configured')
+  if (value.upload && (!Array.isArray(value.upload.allowedHosts) || !value.upload.allowedHosts.length)) throw new Error('Upload allowedHosts must be non-empty')
+  return value
+}
 
 export async function collectPerformanceForMode(mode: WindowsCollectorConfig['mode'], runner: ConstrainedPowerShellRunner): Promise<{ facts: HypervMetricFact[]; gaps: HypervMetricGap[] }> {
   if (mode === 'LOCAL_HYPERV') return normalizeHypervPerformanceOutput(await runner.runLocalHypervPerformance())

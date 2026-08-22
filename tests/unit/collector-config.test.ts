@@ -10,7 +10,7 @@ async function load(overrides: Record<string, unknown> = {}) {
   const path = join(directory, 'collector.config.json')
   await writeFile(path, JSON.stringify({
     stateDirectory: 'state', spoolDirectory: 'spool', scriptsDirectory: 'scripts', manifestPath: 'release-manifest.json',
-    managementPlaneUid: 'fixture', mode: 'LOCAL_HYPERV', intervalSeconds: 60, maxSpoolBytes: 1024, maxSpoolItems: 10,
+    managementPlaneUid: 'hyperv:11111111-1111-4111-8111-111111111111', mode: 'LOCAL_HYPERV', intervalSeconds: 60, maxSpoolBytes: 1024, maxSpoolItems: 10,
     offlineExportDirectory: 'export', executionBoundary: { kind: 'JEA', endpointName: 'CloudVerseCollector' }, ...overrides,
   }))
   return loadWindowsCollectorConfig(path)
@@ -26,5 +26,15 @@ describe('Windows collector execution-boundary configuration', () => {
     await expect(load({ executionBoundary: undefined })).rejects.toThrow('explicit JEA or WDAC')
     await expect(load({ executionBoundary: { kind: 'UNCONSTRAINED' } })).rejects.toThrow('explicit JEA or WDAC')
     await expect(load({ executionBoundary: { kind: 'JEA', endpointName: 'CloudVerse;Get-Process' } })).rejects.toThrow('endpoint name is invalid')
+  })
+  it('binds collector mode to the correct immutable management-plane kind', async () => {
+    await expect(load({ managementPlaneUid: 'scvmm:11111111-1111-4111-8111-111111111111' })).rejects.toThrow('Hyper-V host')
+    await expect(load({ mode: 'SCVMM', managementPlaneUid: 'hyperv:11111111-1111-4111-8111-111111111111', scvmm: { server: 'vmm.example.com', port: 8100 } })).rejects.toThrow('SCVMM management-plane')
+    await expect(load({ mode: 'SCVMM', managementPlaneUid: 'scvmm:11111111-1111-4111-8111-111111111111', scvmm: { server: 'vmm.example.com', port: 8100 } })).resolves.toMatchObject({ mode: 'SCVMM' })
+  })
+  it('rejects invalid spool bounds, missing paths, and empty upload allowlists', async () => {
+    await expect(load({ maxSpoolBytes: 0 })).rejects.toThrow('Positive spool bounds')
+    await expect(load({ stateDirectory: '' })).rejects.toThrow('stateDirectory is required')
+    await expect(load({ offlineExportDirectory: undefined, upload: { endpoint: 'https://cpd.example.test', allowedHosts: [] } })).rejects.toThrow('allowedHosts')
   })
 })

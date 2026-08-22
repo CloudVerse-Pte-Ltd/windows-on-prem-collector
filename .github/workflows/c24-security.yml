@@ -36,6 +36,7 @@ jobs:
           $performanceAllowed = @('ConvertTo-Json','Get-Counter','Get-VM','Set-StrictMode')
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-HypervPerformance.ps1 -AllowedCommand $performanceAllowed
           ./scripts/policy/Test-JeaModulePolicy.ps1 -ModulePath ./scripts/jea/CloudVerseCollector/1.0.0/CloudVerseCollector.psm1
+          ./scripts/policy/Test-InstallerAclPolicy.ps1 -InstallerPath ./scripts/Install-CloudVerseCollector.ps1
           foreach ($script in @('./scripts/Install-CloudVerseCollector.ps1','./scripts/Install-CloudVerseJea.ps1')) {
             $tokens = $null; $errors = $null
             [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors)

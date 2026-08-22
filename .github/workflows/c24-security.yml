@@ -35,6 +35,15 @@ jobs:
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-HypervCimInventory.ps1 -AllowedCommand $cimAllowed
           $performanceAllowed = @('ConvertTo-Json','Get-Counter','Get-VM','Set-StrictMode')
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-HypervPerformance.ps1 -AllowedCommand $performanceAllowed
+          ./scripts/policy/Test-JeaModulePolicy.ps1 -ModulePath ./scripts/jea/CloudVerseCollector/1.0.0/CloudVerseCollector.psm1
+          foreach ($script in @('./scripts/Install-CloudVerseCollector.ps1','./scripts/Install-CloudVerseJea.ps1')) {
+            $tokens = $null; $errors = $null
+            [void][Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$errors)
+            if ($errors.Count -gt 0) { throw "PowerShell parser rejected $script`: $($errors.Message -join '; ')" }
+          }
+          foreach ($dataFile in @('./scripts/jea/CloudVerseCollector/1.0.0/CloudVerseCollector.psd1','./scripts/jea/CloudVerseCollector/1.0.0/RoleCapabilities/CloudVerseCollector.psrc')) {
+            if (-not (Test-PowerShellDataFile $dataFile)) { throw "PowerShell data file is invalid: $dataFile" }
+          }
       - name: Prove unsigned source cannot pass the release signature gate
         shell: powershell
         run: |
@@ -46,10 +55,19 @@ jobs:
           if ($cimSignature.Status -eq 'Valid') { throw 'Source checkout must not masquerade as an approved signed release artifact' }
           $performanceSignature = Get-AuthenticodeSignature ./scripts/operations/Collect-HypervPerformance.ps1
           if ($performanceSignature.Status -eq 'Valid') { throw 'Source checkout must not masquerade as an approved signed release artifact' }
-      - name: Record CI language mode (deployment gate requires ConstrainedLanguage)
+          foreach ($asset in @(
+            './scripts/Install-CloudVerseCollector.ps1',
+            './scripts/Install-CloudVerseJea.ps1',
+            './scripts/jea/CloudVerseCollector/1.0.0/CloudVerseCollector.psm1',
+            './scripts/jea/CloudVerseCollector/1.0.0/CloudVerseCollector.psd1',
+            './scripts/jea/CloudVerseCollector/1.0.0/RoleCapabilities/CloudVerseCollector.psrc'
+          )) {
+            if ((Get-AuthenticodeSignature $asset).Status -eq 'Valid') { throw "Source checkout must remain an unsigned candidate asset: $asset" }
+          }
+      - name: Record CI language mode (deployment gate requires an explicit boundary)
         shell: powershell
         run: |
           $mode = [string]$ExecutionContext.SessionState.LanguageMode
           Write-Host "Windows CI language mode: $mode"
           if ($mode -ne 'FullLanguage') { throw "Unexpected hosted-runner language mode: $mode" }
-          Write-Host 'Hosted CI is not deployment evidence; signed release acceptance separately requires WDAC/AppLocker or JEA ConstrainedLanguage.'
+          Write-Host 'Hosted CI is not deployment evidence; signed release acceptance separately requires WDAC/AppLocker ConstrainedLanguage or the packaged JEA NoLanguage endpoint.'

@@ -10,6 +10,7 @@ export interface ScvmmDiscoveryParameters {
 export const COMMAND_CATALOG = Object.freeze({
   'scvmm.discovery.v1': Object.freeze({
     script: 'Discover-Scvmm.ps1',
+    jeaFunction: 'Invoke-CloudVerseScvmmDiscovery',
     allowedCommands: Object.freeze([
       'ConvertTo-Json', 'Get-SCVMMServer', 'Get-SCUserRole', 'Get-SCVMHost', 'Import-Module', 'Select-Object', 'Set-StrictMode',
     ]),
@@ -17,6 +18,7 @@ export const COMMAND_CATALOG = Object.freeze({
   }),
   'scvmm.inventory.v1': Object.freeze({
     script: 'Collect-ScvmmInventory.ps1',
+    jeaFunction: 'Invoke-CloudVerseScvmmInventory',
     allowedCommands: Object.freeze([
       'ConvertTo-Json', 'Get-SCLogicalNetwork', 'Get-SCStorageArray', 'Get-SCStoragePool', 'Get-SCVirtualMachine',
       'Get-SCVMCheckpoint', 'Get-SCVMHost', 'Get-SCVMHostCluster', 'Get-SCVMHostGroup', 'Get-SCVMNetwork',
@@ -26,15 +28,17 @@ export const COMMAND_CATALOG = Object.freeze({
   }),
   'hyperv.cim.inventory.v1': Object.freeze({
     script: 'Collect-HypervCimInventory.ps1',
+    jeaFunction: 'Invoke-CloudVerseHypervInventory',
     allowedCommands: Object.freeze(['ConvertTo-Json', 'Copy-CloudVerseProperties', 'Get-CimInstance', 'Set-StrictMode']),
     parameters: Object.freeze([]),
   }),
   'hyperv.performance.v1': Object.freeze({
     script: 'Collect-HypervPerformance.ps1',
+    jeaFunction: 'Invoke-CloudVerseHypervPerformance',
     allowedCommands: Object.freeze(['ConvertTo-Json', 'Get-Counter', 'Get-VM', 'Set-StrictMode']),
     parameters: Object.freeze([]),
   }),
-}) satisfies Record<OperationId, { script: string; allowedCommands: readonly string[]; parameters: readonly string[] }>
+}) satisfies Record<OperationId, { script: string; jeaFunction: string; allowedCommands: readonly string[]; parameters: readonly string[] }>
 
 export function validateScvmmDiscoveryParameters(value: unknown): ScvmmDiscoveryParameters {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('SCVMM discovery parameters must be an object')

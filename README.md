@@ -4,15 +4,15 @@ Outbound-only collector for Microsoft Hyper-V and System Center Virtual Machine 
 
 ## Trust boundary
 
-The runtime never accepts inbound commands. PowerShell execution is limited to the immutable command catalog, exact packaged scripts, `AllSigned`, approved signer thumbprints, the canonical Windows PowerShell executable, and a ConstrainedLanguage host established by WDAC/AppLocker or JEA. Source checkouts are intentionally unsigned and cannot pass the production release gate.
+The runtime never accepts inbound commands. PowerShell execution is limited to the immutable command catalog, exact packaged scripts, `AllSigned`, approved signer thumbprints, and the canonical Windows PowerShell executable. The selected execution boundary is explicit: WDAC/AppLocker must place direct execution in `ConstrainedLanguage`, while the supplied JEA endpoint exposes four fixed functions to the collector in `NoLanguage`. Source checkouts are intentionally unsigned and cannot pass the production release gate.
 
-The install script requires its own valid Authenticode signature and an exact release archive SHA-256. A dedicated gMSA or virtual service account is required; interactive user accounts are not supported. The installed scheduled task runs at startup with limited privileges and restart policy. Secrets remain in the ACL-restricted state directory and only public enrollment material leaves the estate.
+The install script requires its own valid Authenticode signature and an exact release archive SHA-256. SCVMM with JEA requires a dedicated domain gMSA so the constrained endpoint can authenticate to the VMM network resource; local Hyper-V JEA uses a temporary virtual run-as account. Interactive user accounts are not supported. The installed scheduled task runs at startup with limited privileges and restart policy. Secrets remain in the ACL-restricted state directory and only public enrollment material leaves the estate.
 
 ## Lifecycle
 
 1. Download a tagged release and verify its GitHub artifact attestation and SHA-256.
-2. Have the enterprise-approved code-signing pipeline Authenticode-sign all operational `.ps1` files and the installer, then run `New-CloudVerseReleaseManifest.ps1` to generate `release-manifest.json` with exact post-signing script hashes and signer thumbprints. Repack the candidate contents at the ZIP root under the final name `cloudverse-windows-collector.zip`; do not add another parent directory.
-3. Configure WDAC/AppLocker or the supplied JEA boundary so Windows PowerShell reports `ConstrainedLanguage`.
+2. Have the enterprise-approved code-signing pipeline Authenticode-sign all operational `.ps1` files, both installers, and every packaged JEA `.ps1`, `.psm1`, `.psd1`, and `.psrc` asset with the same certificate. Then run `New-CloudVerseReleaseManifest.ps1` to generate `release-manifest.json` with exact post-signing operation hashes and signer thumbprints. Repack the candidate contents at the ZIP root under the final name `cloudverse-windows-collector.zip`; do not add another parent directory.
+3. Select `executionBoundary.kind` in the collector configuration. For `JEA`, give an endpoint name; the signed installer creates the supplied `NoLanguage` endpoint and verifies every JEA asset against its own signer. For `WDAC_APPLOCKER`, deploy policy that makes direct Windows PowerShell report `ConstrainedLanguage`.
 4. Run `cloudverse-windows-collector enroll` once with the short-lived enrollment token in a file. The file is consumed after successful enrollment.
 5. Run the signed installer using the exact archive digest and a dedicated service account.
 

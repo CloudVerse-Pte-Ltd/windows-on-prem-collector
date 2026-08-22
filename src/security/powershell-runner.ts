@@ -12,6 +12,7 @@ const FIXED_POWERSHELL_ARGUMENTS = Object.freeze(['-NoLogo', '-NoProfile', '-Non
 const WINDOWS_POWERSHELL_PATH = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
 const AUTHENTICODE_PROBE = "$s=Get-AuthenticodeSignature -LiteralPath $args[0]; [pscustomobject]@{Status=[string]$s.Status;Thumbprint=[string]$s.SignerCertificate.Thumbprint}|ConvertTo-Json -Compress"
 const LANGUAGE_MODE_PROBE = '[string]$ExecutionContext.SessionState.LanguageMode'
+const JEA_LANGUAGE_MODE_PROBE = 'Get-CloudVerseExecutionBoundary'
 
 export interface ProcessResult { stdout: string; stderr: string }
 export type ProcessExecutor = (file: string, args: readonly string[], options: { timeout: number; maxBuffer: number; windowsHide: boolean }) => Promise<ProcessResult>
@@ -19,6 +20,7 @@ export interface PowerShellRunnerOptions {
   scriptsDirectory: string
   manifestPath: string
   powershellPath?: string
+  jeaEndpointName?: string
   allowedScvmmEndpoints?: Array<{ server: string; port: number }>
   timeoutMs?: number
   executor?: ProcessExecutor
@@ -34,13 +36,15 @@ export class ConstrainedPowerShellRunner {
   constructor(private readonly options: PowerShellRunnerOptions) {
     this.powershellPath = options.powershellPath ?? WINDOWS_POWERSHELL_PATH
     if (win32.normalize(this.powershellPath).toLowerCase() !== win32.normalize(WINDOWS_POWERSHELL_PATH).toLowerCase()) throw new Error('Only the canonical Windows PowerShell executable is permitted')
+    if (options.jeaEndpointName && !/^[A-Za-z][A-Za-z0-9.-]{0,63}$/.test(options.jeaEndpointName)) throw new Error('JEA endpoint name is invalid')
     this.executor = options.executor ?? defaultExecutor
   }
 
   async initialize() {
     this.manifest = parseReleaseManifest(JSON.parse(await readFile(this.options.manifestPath, 'utf8')))
-    const languageMode = await this.executor(this.powershellPath, [...FIXED_POWERSHELL_ARGUMENTS, '-Command', LANGUAGE_MODE_PROBE], { timeout: 30_000, maxBuffer: 64 * 1024, windowsHide: true })
-    if (languageMode.stdout.trim() !== 'ConstrainedLanguage') throw new Error('Windows PowerShell must run in ConstrainedLanguage mode under WDAC/AppLocker or JEA policy')
+    const languageMode = await this.executor(this.powershellPath, [...FIXED_POWERSHELL_ARGUMENTS, ...(this.options.jeaEndpointName ? ['-ConfigurationName', this.options.jeaEndpointName] : []), '-Command', this.options.jeaEndpointName ? JEA_LANGUAGE_MODE_PROBE : LANGUAGE_MODE_PROBE], { timeout: 30_000, maxBuffer: 64 * 1024, windowsHide: true })
+    const expectedLanguageMode = this.options.jeaEndpointName ? 'NoLanguage' : 'ConstrainedLanguage'
+    if (languageMode.stdout.trim() !== expectedLanguageMode) throw new Error(`Windows PowerShell must run in ${expectedLanguageMode} mode under the configured ${this.options.jeaEndpointName ? 'JEA' : 'WDAC/AppLocker'} boundary`)
     for (const [operationId, operation] of Object.entries(COMMAND_CATALOG)) await this.verifyScript(operationId as OperationId, operation.script)
   }
 
@@ -54,9 +58,9 @@ export class ConstrainedPowerShellRunner {
 
   async runLocalHypervCimInventory() {
     if (!this.manifest) throw new Error('PowerShell runner is not initialized')
-    const scriptPath = await this.scriptPath(COMMAND_CATALOG['hyperv.cim.inventory.v1'].script)
+    const operation = COMMAND_CATALOG['hyperv.cim.inventory.v1']; const scriptPath = await this.scriptPath(operation.script)
     try {
-      const result = await this.executor(this.powershellPath, [...FIXED_POWERSHELL_ARGUMENTS, '-File', scriptPath], {
+      const result = await this.executor(this.powershellPath, this.operationArguments(operation.jeaFunction, scriptPath), {
         timeout: this.options.timeoutMs ?? 120_000, maxBuffer: 20 * 1024 * 1024, windowsHide: true,
       })
       if (result.stderr.trim()) throw new Error(result.stderr)
@@ -70,9 +74,9 @@ export class ConstrainedPowerShellRunner {
 
   private async runFixedLocalOperation(operationId: 'hyperv.performance.v1', maxBuffer: number) {
     if (!this.manifest) throw new Error('PowerShell runner is not initialized')
-    const scriptPath = await this.scriptPath(COMMAND_CATALOG[operationId].script)
+    const operation = COMMAND_CATALOG[operationId]; const scriptPath = await this.scriptPath(operation.script)
     try {
-      const result = await this.executor(this.powershellPath, [...FIXED_POWERSHELL_ARGUMENTS, '-File', scriptPath], { timeout: this.options.timeoutMs ?? 120_000, maxBuffer, windowsHide: true })
+      const result = await this.executor(this.powershellPath, this.operationArguments(operation.jeaFunction, scriptPath), { timeout: this.options.timeoutMs ?? 120_000, maxBuffer, windowsHide: true })
       if (result.stderr.trim()) throw new Error(result.stderr)
       return JSON.parse(result.stdout)
     } catch (error) { throw new Error(redactWindowsCollectorError(error)) }
@@ -82,9 +86,9 @@ export class ConstrainedPowerShellRunner {
     if (!this.manifest) throw new Error('PowerShell runner is not initialized')
     const value = validateScvmmDiscoveryParameters(parameters)
     if (!(this.options.allowedScvmmEndpoints ?? []).some((endpoint) => endpoint.server.toLowerCase() === value.server.toLowerCase() && endpoint.port === value.port)) throw new Error('SCVMM endpoint is not allowlisted')
-    const scriptPath = await this.scriptPath(COMMAND_CATALOG[operationId].script)
+    const operation = COMMAND_CATALOG[operationId]; const scriptPath = await this.scriptPath(operation.script)
     try {
-      const result = await this.executor(this.powershellPath, [...FIXED_POWERSHELL_ARGUMENTS, '-File', scriptPath, '-Server', value.server, '-Port', String(value.port)], {
+      const result = await this.executor(this.powershellPath, this.operationArguments(operation.jeaFunction, scriptPath, ['-Server', value.server, '-Port', String(value.port)]), {
         timeout: this.options.timeoutMs ?? 120_000, maxBuffer: 10 * 1024 * 1024, windowsHide: true,
       })
       if (result.stderr.trim()) throw new Error(result.stderr)
@@ -104,6 +108,12 @@ export class ConstrainedPowerShellRunner {
     const signature = JSON.parse(result.stdout) as { Status?: string; Thumbprint?: string }
     const thumbprint = String(signature.Thumbprint ?? '').replace(/\s/g, '').toUpperCase()
     if (signature.Status !== 'Valid' || !expected.signerThumbprints.map((item) => item.toUpperCase()).includes(thumbprint)) throw new Error(`Authenticode verification failed for ${operationId}`)
+  }
+
+  private operationArguments(jeaFunction: string, scriptPath: string, parameters: string[] = []) {
+    return this.options.jeaEndpointName
+      ? [...FIXED_POWERSHELL_ARGUMENTS, '-ConfigurationName', this.options.jeaEndpointName, '-Command', jeaFunction, ...parameters]
+      : [...FIXED_POWERSHELL_ARGUMENTS, '-File', scriptPath, ...parameters]
   }
 
   private async scriptPath(scriptName: string) {

@@ -1,0 +1,9 @@
+@{
+  GUID = '1ad78d31-04ef-4500-82c5-5b86b1215d16'
+  Author = 'CloudVerse Pte. Ltd.'
+  CompanyName = 'CloudVerse Pte. Ltd.'
+  VisibleFunctions = @('Get-CloudVerseExecutionBoundary','Invoke-CloudVerseScvmmDiscovery','Invoke-CloudVerseScvmmInventory','Invoke-CloudVerseHypervInventory','Invoke-CloudVerseHypervPerformance')
+  VisibleCmdlets = @()
+  VisibleExternalCommands = @()
+  VisibleProviders = @()
+}

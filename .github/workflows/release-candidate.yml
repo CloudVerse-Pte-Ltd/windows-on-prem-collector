@@ -41,11 +41,13 @@ jobs:
           if (Test-Path $nodeLicense -PathType Leaf) { Copy-Item -LiteralPath $nodeLicense -Destination release/cloudverse-windows-collector/NODE-LICENSE.txt }
           New-Item -ItemType Directory release/cloudverse-windows-collector/scripts/operations -Force | Out-Null
           Copy-Item scripts/operations/*.ps1 release/cloudverse-windows-collector/scripts/operations
-          Copy-Item scripts/Install-CloudVerseCollector.ps1, scripts/New-CloudVerseReleaseManifest.ps1 release/cloudverse-windows-collector/scripts
+          Copy-Item scripts/jea release/cloudverse-windows-collector/scripts/jea -Recurse
+          Copy-Item scripts/Install-CloudVerseCollector.ps1, scripts/Install-CloudVerseJea.ps1, scripts/New-CloudVerseReleaseManifest.ps1 release/cloudverse-windows-collector/scripts
           @'
           This is an unsigned signing candidate, not an installable production release.
           An enterprise-approved pipeline must Authenticode-sign the installer and every
-          operational script, generate release-manifest.json, then assemble and attest
+          operational script and every packaged JEA .ps1/.psm1/.psd1/.psrc asset
+          with the same certificate, generate release-manifest.json, then assemble and attest
           the final archive. Source checkout signatures are intentionally absent.
           '@ | Set-Content release/cloudverse-windows-collector/UNSIGNED-CANDIDATE.txt
           Compress-Archive release/cloudverse-windows-collector/* cloudverse-windows-collector-unsigned.zip

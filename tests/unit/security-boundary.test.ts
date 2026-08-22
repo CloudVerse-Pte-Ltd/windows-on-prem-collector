@@ -8,7 +8,7 @@ import { COMMAND_CATALOG, ConstrainedPowerShellRunner, parseReleaseManifest, red
 const temporaryDirectories: string[] = []
 const thumbprint = 'A'.repeat(40)
 
-async function harness(options: { tamper?: boolean; signatureStatus?: string; signer?: string } = {}) {
+async function harness(options: { tamper?: boolean; signatureStatus?: string; signer?: string; jea?: boolean } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'cv-windows-collector-')); temporaryDirectories.push(directory)
   const script = Buffer.from('Get-SCVMMServer\n')
   const inventoryScript = Buffer.from('Get-SCVirtualMachine\n')
@@ -25,11 +25,11 @@ async function harness(options: { tamper?: boolean; signatureStatus?: string; si
     'Collect-HypervCimInventory.ps1': { sha256: createHash('sha256').update(cimScript).digest('hex'), signerThumbprints: [thumbprint] },
     'Collect-HypervPerformance.ps1': { sha256: createHash('sha256').update(performanceScript).digest('hex'), signerThumbprints: [thumbprint] },
   } }))
-  const executor = vi.fn(async (_file: string, args: readonly string[]) => args.includes('[string]$ExecutionContext.SessionState.LanguageMode')
-    ? { stdout: 'ConstrainedLanguage\n', stderr: '' }
-    : args.includes('-Command') ? { stdout: JSON.stringify({ Status: options.signatureStatus ?? 'Valid', Thumbprint: options.signer ?? thumbprint }), stderr: '' }
+  const executor = vi.fn(async (_file: string, args: readonly string[]) => args.includes('[string]$ExecutionContext.SessionState.LanguageMode') || args.includes('Get-CloudVerseExecutionBoundary')
+    ? { stdout: options.jea ? 'NoLanguage\n' : 'ConstrainedLanguage\n', stderr: '' }
+    : args.some((item) => item.includes('Get-AuthenticodeSignature')) ? { stdout: JSON.stringify({ Status: options.signatureStatus ?? 'Valid', Thumbprint: options.signer ?? thumbprint }), stderr: '' }
     : { stdout: JSON.stringify({ schemaVersion: '1.0', requestedRole: 'ReadOnlyAdmin' }), stderr: '' })
-  return { runner: new ConstrainedPowerShellRunner({ scriptsDirectory: directory, manifestPath, executor, allowedScvmmEndpoints: [{ server: 'vmm01.example.com', port: 8100 }] }), executor, directory }
+  return { runner: new ConstrainedPowerShellRunner({ scriptsDirectory: directory, manifestPath, executor, jeaEndpointName: options.jea ? 'CloudVerseCollector' : undefined, allowedScvmmEndpoints: [{ server: 'vmm01.example.com', port: 8100 }] }), executor, directory }
 }
 
 afterEach(async () => Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))))
@@ -80,6 +80,21 @@ describe('C24 Windows collector security boundary', () => {
     const [file, args] = executor.mock.calls.at(-1)!
     expect(file).toMatch(/powershell\.exe$/i)
     expect(args).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'AllSigned', '-File', await realpath(resolve(directory, 'Collect-HypervPerformance.ps1'))])
+  })
+
+  it('executes only fixed catalog functions through an explicit NoLanguage JEA endpoint', async () => {
+    const { runner, executor } = await harness({ jea: true }); await runner.initialize()
+    await runner.runScvmmDiscovery({ server: 'vmm01.example.com', port: 8100 })
+    const [, probe] = executor.mock.calls[0]
+    expect(probe).toContain('CloudVerseCollector'); expect(probe).toContain('Get-CloudVerseExecutionBoundary')
+    const [, operation] = executor.mock.calls.at(-1)!
+    expect(operation).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'AllSigned', '-ConfigurationName', 'CloudVerseCollector', '-Command', 'Invoke-CloudVerseScvmmDiscovery', '-Server', 'vmm01.example.com', '-Port', '8100'])
+    expect(operation).not.toContain('-File')
+  })
+
+  it('rejects unsafe JEA endpoint names before process creation', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cv-windows-jea-')); temporaryDirectories.push(directory)
+    expect(() => new ConstrainedPowerShellRunner({ scriptsDirectory: directory, manifestPath: join(directory, 'manifest.json'), jeaEndpointName: 'endpoint;Get-Process' })).toThrow('JEA endpoint')
   })
 
   it('fails closed on changed bytes, invalid signature or unapproved signer', async () => {

@@ -22,7 +22,7 @@ $dynamicCommands = @($ast.FindAll({param($node) $node -is [System.Management.Aut
 $expectedOperations = @(
   "& (Join-Path `$operations 'Collect-HypervCimInventory.ps1')",
   "& (Join-Path `$operations 'Collect-HypervPerformance.ps1')",
-  "& (Join-Path `$operations 'Collect-ScvmmInventory.ps1') -Server `$Server -Port `$Port",
+  "& (Join-Path `$operations 'Collect-ScvmmInventory.ps1') -Server `$Server -Port `$Port -PageNumber `$PageNumber -PageSize `$PageSize",
   "& (Join-Path `$operations 'Discover-Scvmm.ps1') -Server `$Server -Port `$Port"
 )
 $actualOperations = @($dynamicCommands | ForEach-Object {$_.Extent.Text.Trim()} | Sort-Object)

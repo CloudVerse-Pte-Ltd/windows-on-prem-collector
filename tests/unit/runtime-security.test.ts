@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { EncryptedWindowsSpool } from '../../src/runtime/encrypted-spool.js'
 import { enrollWindowsCollector, statePaths } from '../../src/runtime/enrollment.js'
 import { canonicalBundleJson, WindowsBundleSigner } from '../../src/runtime/signed-bundle.js'
+import { collectPerformanceForMode } from '../../src/runtime/collector-runtime.js'
 
 describe('Windows collector runtime security', () => {
   it('enrolls with public material and never sends generated secrets', async () => {
@@ -39,5 +40,16 @@ describe('Windows collector runtime security', () => {
 
   it('fails closed on insecure enrollment transport', async () => {
     await expect(enrollWindowsCollector({ controlPlaneUrl: 'http://cpd.example.test', orgId: 1, integrationId: 1, enrollmentToken: 'x', stateDirectory: 'unused' })).rejects.toThrow('HTTPS')
+  })
+
+  it('does not misattribute local Hyper-V counters to an SCVMM estate', async () => {
+    const runner = { runLocalHypervPerformance: vi.fn() } as any
+    const result = await collectPerformanceForMode('SCVMM', runner)
+    expect(runner.runLocalHypervPerformance).not.toHaveBeenCalled()
+    expect(result.facts).toEqual([])
+    expect(result.gaps).toEqual([expect.objectContaining({
+      code: 'SCVMM_PERFORMANCE_ADAPTER_REQUIRED',
+      details: expect.objectContaining({ localCountersRejected: true }),
+    })])
   })
 })

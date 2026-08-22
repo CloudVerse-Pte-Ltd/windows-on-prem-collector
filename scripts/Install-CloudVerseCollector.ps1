@@ -71,7 +71,8 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
     if ($ServiceAccount -ne 'CloudVerseCollectorSvc') { throw 'LOCAL_HYPERV JEA requires the installer-managed CloudVerseCollectorSvc identity' }
     if (Get-LocalUser -Name $ServiceAccount -ErrorAction SilentlyContinue) { throw 'The installer-managed local collector identity already exists' }
     $random = [byte[]]::new(32)
-    [Security.Cryptography.RandomNumberGenerator]::Fill($random)
+    $randomNumberGenerator = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $randomNumberGenerator.GetBytes($random) } finally { $randomNumberGenerator.Dispose() }
     $taskPassword = 'Cv1!' + [Convert]::ToBase64String($random).Replace('+','A').Replace('/','B').TrimEnd('=')
     $secureTaskPassword = ConvertTo-SecureString $taskPassword -AsPlainText -Force
     New-LocalUser -Name $ServiceAccount -Password $secureTaskPassword -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword -Description 'CloudVerse local Hyper-V collector service identity' | Out-Null

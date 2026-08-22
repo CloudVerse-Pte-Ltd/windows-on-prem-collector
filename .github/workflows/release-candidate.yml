@@ -67,4 +67,4 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         shell: powershell
         env: { GH_TOKEN: '${{ github.token }}' }
-        run: gh release create "$env:GITHUB_REF_NAME" cloudverse-windows-collector-unsigned.zip cloudverse-windows-collector-unsigned.zip.sha256 --verify-tag --title "$env:GITHUB_REF_NAME (unsigned signing candidate)" --notes "Not installable. Requires enterprise Authenticode signing and final release attestation."
+        run: gh release create "$env:GITHUB_REF_NAME" cloudverse-windows-collector-unsigned.zip cloudverse-windows-collector-unsigned.zip.sha256 --verify-tag --prerelease --title "$env:GITHUB_REF_NAME (unsigned signing candidate)" --notes "Not installable. Requires enterprise Authenticode signing and final release attestation."

@@ -1,0 +1,43 @@
+name: windows-release-candidate
+on:
+  workflow_dispatch:
+  push: { tags: ['windows-collector-v*'] }
+permissions: { contents: write, id-token: write, attestations: write }
+jobs:
+  build-test-attest:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm prune --omit=dev
+      - name: Assemble non-installable signing candidate
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory release/cloudverse-windows-collector | Out-Null
+          Copy-Item dist, node_modules, package.json, package-lock.json, README.md, SECURITY.md -Destination release/cloudverse-windows-collector -Recurse
+          New-Item -ItemType Directory release/cloudverse-windows-collector/scripts/operations -Force | Out-Null
+          Copy-Item scripts/operations/*.ps1 release/cloudverse-windows-collector/scripts/operations
+          Copy-Item scripts/Install-CloudVerseCollector.ps1, scripts/New-CloudVerseReleaseManifest.ps1 release/cloudverse-windows-collector/scripts
+          @'
+          This is an unsigned signing candidate, not an installable production release.
+          An enterprise-approved pipeline must Authenticode-sign the installer and every
+          operational script, generate release-manifest.json, then assemble and attest
+          the final archive. Source checkout signatures are intentionally absent.
+          '@ | Set-Content release/cloudverse-windows-collector/UNSIGNED-CANDIDATE.txt
+          Compress-Archive release/cloudverse-windows-collector cloudverse-windows-collector-unsigned.zip
+          (Get-FileHash cloudverse-windows-collector-unsigned.zip -Algorithm SHA256).Hash.ToLowerInvariant() | Set-Content cloudverse-windows-collector-unsigned.zip.sha256
+      - uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
+        with: { subject-path: cloudverse-windows-collector-unsigned.zip }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with: { name: cloudverse-windows-collector-unsigned, path: 'cloudverse-windows-collector-unsigned.zip*', if-no-files-found: error }
+      - name: Publish tagged candidate
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: powershell
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: gh release create "$env:GITHUB_REF_NAME" cloudverse-windows-collector-unsigned.zip cloudverse-windows-collector-unsigned.zip.sha256 --verify-tag --title "$env:GITHUB_REF_NAME (unsigned signing candidate)" --notes "Not installable. Requires enterprise Authenticode signing and final release attestation."

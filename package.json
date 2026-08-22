@@ -2,13 +2,19 @@
   "name": "@cloudverse/windows-on-prem-collector",
   "version": "0.1.0",
   "private": true,
+  "description": "Outbound-only CloudVerse collector for Hyper-V and SCVMM estates",
+  "bin": { "cloudverse-windows-collector": "dist/src/runtime/cli.js" },
   "type": "module",
   "engines": { "node": ">=22" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "start": "node dist/src/runtime/cli.js run",
     "ci": "npm ci && npm run typecheck && npm run build && npm test && npm audit --omit=dev --audit-level=moderate"
+  },
+  "dependencies": {
+    "undici": "^7.16.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",

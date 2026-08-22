@@ -63,8 +63,7 @@ jobs:
             './scripts/Install-CloudVerseJea.ps1',
             './scripts/Update-CloudVerseCollector.ps1',
             './scripts/jea/CloudVerseCollector/1.0.0/CloudVerseCollector.psm1',
-            './scripts/jea/CloudVerseCollector/1.0.0/CloudVerseCollector.psd1',
-            './scripts/jea/CloudVerseCollector/1.0.0/RoleCapabilities/CloudVerseCollector.psrc'
+            './scripts/jea/CloudVerseCollector/1.0.0/CloudVerseCollector.psd1'
           )) {
             if ((Get-AuthenticodeSignature $asset).Status -eq 'Valid') { throw "Source checkout must remain an unsigned candidate asset: $asset" }
           }

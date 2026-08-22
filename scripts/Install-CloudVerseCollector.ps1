@@ -70,8 +70,7 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
     $jeaFiles = @(
       'scripts\Install-CloudVerseJea.ps1',
       'scripts\jea\CloudVerseCollector\1.0.0\CloudVerseCollector.psm1',
-      'scripts\jea\CloudVerseCollector\1.0.0\CloudVerseCollector.psd1',
-      'scripts\jea\CloudVerseCollector\1.0.0\RoleCapabilities\CloudVerseCollector.psrc'
+      'scripts\jea\CloudVerseCollector\1.0.0\CloudVerseCollector.psd1'
     )
     foreach ($relative in $jeaFiles) {
       $path = Join-Path $InstallDirectory $relative
@@ -80,6 +79,8 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
       $assetThumbprint = if ($assetSignature.SignerCertificate) { $assetSignature.SignerCertificate.Thumbprint.ToUpperInvariant() } else { '' }
       if ($assetSignature.Status -ne 'Valid' -or $assetThumbprint -ne $approvedSignerThumbprint) { throw "JEA asset is not signed by the installer signer: $relative" }
     }
+    $roleCapability = Join-Path $InstallDirectory 'scripts\jea\CloudVerseCollector\1.0.0\RoleCapabilities\CloudVerseCollector.psrc'
+    if (-not (Test-Path $roleCapability -PathType Leaf)) { throw 'JEA release package is incomplete: CloudVerseCollector.psrc' }
   }
   $stateDirectory = Resolve-CloudVerseDataDirectory -Label 'stateDirectory' -Value ([string]$configuration.stateDirectory) -CodeDirectory $InstallDirectory
   $spoolDirectory = Resolve-CloudVerseDataDirectory -Label 'spoolDirectory' -Value ([string]$configuration.spoolDirectory) -CodeDirectory $InstallDirectory

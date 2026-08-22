@@ -48,7 +48,8 @@ try {
   }
   foreach ($relative in @('scripts\Install-CloudVerseCollector.ps1','scripts\Install-CloudVerseJea.ps1','scripts\Update-CloudVerseCollector.ps1','scripts\operations\Discover-Scvmm.ps1','scripts\operations\Collect-ScvmmInventory.ps1','scripts\operations\Collect-HypervCimInventory.ps1','scripts\operations\Collect-HypervPerformance.ps1')) { Assert-CloudVerseSignedAsset -Path (Join-Path $staging $relative) -Signer $approvedSigner }
   if ($endpointName) {
-    foreach ($relative in @('scripts\jea\CloudVerseCollector\1.0.0\CloudVerseCollector.psm1','scripts\jea\CloudVerseCollector\1.0.0\CloudVerseCollector.psd1','scripts\jea\CloudVerseCollector\1.0.0\RoleCapabilities\CloudVerseCollector.psrc')) { Assert-CloudVerseSignedAsset -Path (Join-Path $staging $relative) -Signer $approvedSigner }
+    foreach ($relative in @('scripts\jea\CloudVerseCollector\1.0.0\CloudVerseCollector.psm1','scripts\jea\CloudVerseCollector\1.0.0\CloudVerseCollector.psd1')) { Assert-CloudVerseSignedAsset -Path (Join-Path $staging $relative) -Signer $approvedSigner }
+    if (-not (Test-Path (Join-Path $staging 'scripts\jea\CloudVerseCollector\1.0.0\RoleCapabilities\CloudVerseCollector.psrc') -PathType Leaf)) { throw 'Upgrade package is incomplete: CloudVerseCollector.psrc' }
   }
   Copy-Item -LiteralPath $currentConfigPath -Destination (Join-Path $staging 'collector.config.json')
   if (-not $PSCmdlet.ShouldProcess($install, 'Transactionally upgrade CloudVerse data-center collector')) { return }

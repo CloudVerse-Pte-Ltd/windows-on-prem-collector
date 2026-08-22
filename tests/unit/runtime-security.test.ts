@@ -3,7 +3,7 @@ import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { EncryptedWindowsSpool, WindowsSpoolUploader } from '../../src/runtime/encrypted-spool.js'
+import { EncryptedWindowsSpool, WindowsSpoolUploader, WINDOWS_ACCEPTED_BUNDLE_SCHEMAS } from '../../src/runtime/encrypted-spool.js'
 import { enrollWindowsCollector, statePaths } from '../../src/runtime/enrollment.js'
 import { canonicalBundleJson, WindowsBundleSigner } from '../../src/runtime/signed-bundle.js'
 import { collectionRetryDelay, collectPerformanceForMode, WindowsCollectorRuntime, type WindowsCollectorConfig } from '../../src/runtime/collector-runtime.js'
@@ -106,6 +106,19 @@ describe('Windows collector runtime security', () => {
     available = true
     await expect(uploader.flushOnce(new Date(started.valueOf() + 2_000))).resolves.toMatchObject({ sent: 1 })
     expect(await spool.usage()).toMatchObject({ items: 0 }); expect(await uploader.health()).toMatchObject({ healthy: true, lastError: null })
+  })
+
+  it('delivers N-1 queued bytes unchanged and preserves older incompatible schemas for rollback', async () => {
+    expect(WINDOWS_ACCEPTED_BUNDLE_SCHEMAS).toEqual(['1.0', '0.9'])
+    const directory = await mkdtemp(join(tmpdir(), 'cv-win-upgrade-')); const spool = new EncryptedWindowsSpool({ directory, key: Buffer.alloc(32, 6), maxBytes: 1_000_000, maxItems: 10, acceptedSchemaVersions: [...WINDOWS_ACCEPTED_BUNDLE_SCHEMAS] })
+    const previousBytes = Buffer.from('{"schemaVersion":"0.9","signed":"previous-release-bytes"}')
+    await spool.enqueue('bundle-n-minus-one', '0.9', previousBytes); await spool.enqueue('bundle-too-old', '0.8', Buffer.from('preserve-for-rollback'))
+    const sent: Array<{ schema: string; body: Buffer }> = []
+    const sender = vi.fn(async (_url: any, init: any) => { sent.push({ schema: init.headers['x-bundle-schema-version'], body: Buffer.from(init.body) }); return new Response(null, { status: 202 }) }) as any
+    const uploader = new WindowsSpoolUploader(spool, { endpoint: 'https://ingest.example.test', allowedHosts: ['ingest.example.test'], bearerToken: 'transport-token' }, async () => ['8.8.8.8'], sender)
+    await expect(uploader.flushOnce(new Date(Date.now() + 1_000))).resolves.toMatchObject({ sent: 1, incompatible: 1 })
+    expect(sent).toEqual([{ schema: '0.9', body: previousBytes }]); expect(await spool.usage()).toMatchObject({ items: 1 })
+    await expect(uploader.health()).resolves.toMatchObject({ healthy: false, incompatible: 1, incompatibleSchemas: ['0.8'], acceptedSchemas: ['1.0', '0.9'] })
   })
 
   it('uses an allowlisted authenticated HTTPS proxy without exposing its authorization', async () => {

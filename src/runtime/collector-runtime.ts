@@ -6,7 +6,7 @@ import { toHypervCollectionPayload, toHypervInventoryEnvelope, toHypervTelemetry
 import { normalizeHypervPerformanceOutput, type HypervMetricFact, type HypervMetricGap } from '../hyperv/performance.js'
 import { ScvmmInventoryAdapter } from '../scvmm/inventory.js'
 import { ConstrainedPowerShellRunner } from '../security/powershell-runner.js'
-import { EncryptedWindowsSpool, WindowsSpoolUploader } from './encrypted-spool.js'
+import { EncryptedWindowsSpool, WindowsSpoolUploader, WINDOWS_ACCEPTED_BUNDLE_SCHEMAS } from './encrypted-spool.js'
 import { statePaths, type WindowsCollectorIdentity } from './enrollment.js'
 import { WindowsBundleSigner } from './signed-bundle.js'
 import { collectionFailureHealth, collectionSuccessHealth, initialRuntimeHealth, RuntimeHealthStore, type CollectorRuntimeHealth } from './runtime-health.js'
@@ -66,7 +66,7 @@ async function abortableDelay(milliseconds: number, signal?: AbortSignal) { awai
 export async function createWindowsCollectorRuntime(config: WindowsCollectorConfig) {
   const paths = statePaths(config.stateDirectory); const identity = JSON.parse(await readFile(paths.identity, 'utf8')) as WindowsCollectorIdentity
   const runner = new ConstrainedPowerShellRunner({ scriptsDirectory: config.scriptsDirectory, manifestPath: config.manifestPath, jeaEndpointName: config.executionBoundary.kind === 'JEA' ? config.executionBoundary.endpointName : undefined, allowedScvmmEndpoints: config.scvmm ? [config.scvmm] : [] })
-  const spool = new EncryptedWindowsSpool({ directory: config.spoolDirectory, key: Buffer.from((await readFile(paths.spoolKey, 'utf8')).trim(), 'base64'), maxBytes: config.maxSpoolBytes, maxItems: config.maxSpoolItems, acceptedSchemaVersions: ['1.0'] })
+  const spool = new EncryptedWindowsSpool({ directory: config.spoolDirectory, key: Buffer.from((await readFile(paths.spoolKey, 'utf8')).trim(), 'base64'), maxBytes: config.maxSpoolBytes, maxItems: config.maxSpoolItems, acceptedSchemaVersions: [...WINDOWS_ACCEPTED_BUNDLE_SCHEMAS] })
   const signer = new WindowsBundleSigner(await readFile(paths.privateKey, 'utf8'), { orgId: identity.orgId, collectorId: identity.collectorId, signatureKeyId: identity.keyId })
   const proxy = config.upload?.proxy ? { endpoint: config.upload.proxy.endpoint, allowedHosts: config.upload.proxy.allowedHosts, privateAddressAllowedHosts: config.upload.proxy.privateAddressAllowedHosts, authorization: (await readFile(config.upload.proxy.authorizationFile, 'utf8')).trim() } : undefined
   const uploader = config.upload ? new WindowsSpoolUploader(spool, { endpoint: config.upload.endpoint, allowedHosts: config.upload.allowedHosts, privateAddressAllowedHosts: config.upload.privateAddressAllowedHosts, bearerToken: (await readFile(paths.transportToken, 'utf8')).trim(), proxy }) : undefined

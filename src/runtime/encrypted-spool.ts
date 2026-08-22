@@ -10,6 +10,7 @@ interface Item { queueId: string; bundleId: string; schemaVersion: string; creat
 type Resolver = (hostname: string) => Promise<string[]>
 type Sender = typeof undiciFetch
 export interface WindowsProxyConfig { endpoint: string; allowedHosts: string[]; privateAddressAllowedHosts?: string[]; authorization: string }
+export const WINDOWS_ACCEPTED_BUNDLE_SCHEMAS = Object.freeze(['1.0', '0.9'] as const)
 const privateAddress = (address: string): boolean => {
   const value = address.toLowerCase()
   if (value === '::' || value === '::1' || value.startsWith('fc') || value.startsWith('fd') || /^fe[89ab]/.test(value) || value.startsWith('ff') || value.startsWith('2001:db8:')) return true
@@ -32,6 +33,7 @@ export class EncryptedWindowsSpool {
   async list() { await this.initialize(); const names = (await readdir(this.config.directory)).filter((name) => name.endsWith('.bundle')).sort(); return Promise.all(names.map(async (name) => this.decrypt(await readFile(join(this.config.directory, name))))) }
   async usage() { await this.initialize(); const names = (await readdir(this.config.directory)).filter((name) => name.endsWith('.bundle')); let bytes = 0; for (const name of names) bytes += (await stat(join(this.config.directory, name))).size; return { items: names.length, bytes } }
   accepts(version: string) { return this.config.acceptedSchemaVersions.includes(version) }
+  acceptedSchemas() { return [...this.config.acceptedSchemaVersions] }
   async remove(queueId: string) { if (!/^[0-9]{13}-[0-9a-f-]{36}$/.test(queueId)) throw new Error('Invalid queue ID'); await unlink(join(this.config.directory, `${queueId}.bundle`)) }
   async update(item: Item) { await this.exclusive(async () => { const bytes = this.encrypt(item); const usage = await this.usage(); const existing = await stat(join(this.config.directory, `${item.queueId}.bundle`)); if (usage.bytes - existing.size + bytes.length > this.config.maxBytes) throw new Error('COLLECTOR_SPOOL_BACKPRESSURE'); await this.write(item.queueId, bytes) }) }
   private encrypt(item: Item) { const iv = randomBytes(12); const cipher = createCipheriv('aes-256-gcm', this.config.key, iv); const encrypted = Buffer.concat([cipher.update(JSON.stringify({ ...item, payload: item.payload.toString('base64') })), cipher.final()]); return Buffer.from(JSON.stringify({ v: 1, iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), encrypted: encrypted.toString('base64') })) }
@@ -77,6 +79,6 @@ export class WindowsSpoolUploader {
     try { for (const item of items) { if (!this.spool.accepts(item.schemaVersion)) { incompatible++; continue }; if (new Date(item.nextAttemptAt) > now) { deferred++; continue }; try { const response = await this.sender(url, { method: 'POST', dispatcher: agent, headers: { 'content-type': 'application/json', authorization: `Bearer ${this.config.bearerToken}`, 'x-bundle-id': item.bundleId, 'x-bundle-schema-version': item.schemaVersion }, body: item.payload }); if (!response.ok) throw new Error(`Upload returned HTTP ${response.status}`); await this.spool.remove(item.queueId); sent++; this.lastError = null; this.lastSuccessAt = now.toISOString() } catch (error) { await this.defer(item, now, redactWindowsCollectorError(error)); deferred++; this.lastError = item.lastError ?? 'Collector upload failed' } } } finally { await agent.close() }
     return { examined: items.length, sent, deferred, incompatible }
   }
-  async health() { const items = await this.spool.list(); return { healthy: this.lastError === null && items.every((item) => this.spool.accepts(item.schemaVersion)), queue: await this.spool.usage(), incompatible: items.filter((item) => !this.spool.accepts(item.schemaVersion)).length, lastError: this.lastError, lastSuccessAt: this.lastSuccessAt } }
+  async health() { const items = await this.spool.list(); const incompatibleSchemas = [...new Set(items.filter((item) => !this.spool.accepts(item.schemaVersion)).map((item) => item.schemaVersion))].sort(); return { healthy: this.lastError === null && incompatibleSchemas.length === 0, queue: await this.spool.usage(), incompatible: items.filter((item) => !this.spool.accepts(item.schemaVersion)).length, incompatibleSchemas, acceptedSchemas: this.spool.acceptedSchemas(), lastError: this.lastError, lastSuccessAt: this.lastSuccessAt } }
   private async defer(item: Item, now: Date, message: string) { item.attempts++; item.lastError = message; item.nextAttemptAt = new Date(now.valueOf() + Math.min(3_600_000, 1000 * 2 ** Math.min(item.attempts, 12))).toISOString(); await this.spool.update(item) }
 }

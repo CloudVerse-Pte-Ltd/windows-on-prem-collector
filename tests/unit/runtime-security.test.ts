@@ -19,6 +19,18 @@ describe('Windows collector runtime security', () => {
     expect(requests[0].body.transportTokenHash).toMatch(/^[0-9a-f]{64}$/)
   })
 
+  it('reuses one local identity after an ambiguous enrollment failure', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'cv-win-enroll-retry-')); const bodies: any[] = []; let attempt = 0
+    const transport = vi.fn(async (_url: any, init: any) => { bodies.push(JSON.parse(init.body)); attempt++; if (attempt === 1) throw new Error('connection closed after request'); return new Response(null, { status: 201 }) }) as any
+    const config = { controlPlaneUrl: 'https://cpd.example.test/data-center-collector', orgId: 8, integrationId: 22, enrollmentToken: 'bootstrap-secret', stateDirectory: root }
+    await expect(enrollWindowsCollector(config, transport)).rejects.toThrow('connection closed')
+    const paths = statePaths(root); const firstPrivateKey = await readFile(paths.privateKey, 'utf8'); const pending = JSON.parse(await readFile(paths.pending, 'utf8'))
+    const identity = await enrollWindowsCollector(config, transport)
+    expect(identity.collectorId).toBe(pending.identity.collectorId); expect(await readFile(paths.privateKey, 'utf8')).toBe(firstPrivateKey)
+    expect(bodies[1]).toMatchObject({ collectorId: bodies[0].collectorId, keyId: bodies[0].keyId, publicKeyPem: bodies[0].publicKeyPem, transportTokenHash: bodies[0].transportTokenHash })
+    await expect(readFile(paths.pending, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('encrypts spool contents and detects tampering', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'cv-win-spool-')); const key = Buffer.alloc(32, 7)
     const spool = new EncryptedWindowsSpool({ directory, key, maxBytes: 1_000_000, maxItems: 10, acceptedSchemaVersions: ['1.0'] })

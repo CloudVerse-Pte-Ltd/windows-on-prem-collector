@@ -32,7 +32,9 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory release/cloudverse-windows-collector | Out-Null
-          Copy-Item dist, node_modules, package.json, package-lock.json, README.md, SECURITY.md, SOURCE_PROVENANCE.md, cloudverse-windows-collector.spdx.json -Destination release/cloudverse-windows-collector -Recurse
+          Copy-Item dist, package.json, package-lock.json, README.md, SECURITY.md, SOURCE_PROVENANCE.md, cloudverse-windows-collector.spdx.json -Destination release/cloudverse-windows-collector -Recurse
+          New-Item -ItemType Directory release/cloudverse-windows-collector/node_modules | Out-Null
+          Copy-Item node_modules/undici -Destination release/cloudverse-windows-collector/node_modules -Recurse
           $node = (Get-Command node.exe -ErrorAction Stop).Source
           Copy-Item -LiteralPath $node -Destination release/cloudverse-windows-collector/node.exe
           $nodeLicense = Join-Path (Split-Path $node -Parent) 'LICENSE'

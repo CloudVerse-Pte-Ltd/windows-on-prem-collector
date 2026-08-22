@@ -27,6 +27,8 @@ describe('C32 Hyper-V performance normalization', () => {
     expect(normalizeHypervPerformanceOutput(raw([], [])).gaps).toContainEqual({ code: 'NO_LOCAL_HISTORY' })
     expect(() => normalizeHypervPerformanceOutput(raw([{ ...sample('vm', 1, '2026-08-21T00:00:00Z'), metricKey: 'synthetic.cpu' }]))).toThrow('unknown counter')
     expect(() => normalizeHypervPerformanceOutput(raw([{ ...sample('vm', 1, '2026-08-21T00:00:00Z'), vmUid: 'vm-name' }]))).toThrow('immutable VM GUID')
+    expect(() => normalizeHypervPerformanceOutput(raw([{ ...sample('vm', 101, '2026-08-21T00:00:00Z') }]))).toThrow('invalid sample')
+    expect(() => normalizeHypervPerformanceOutput(raw([], [{ code: 'COUNTER_UNAVAILABLE', vmUid: 'vm-name' }]))).toThrow('immutable VM GUID')
   })
 
   it('accepts SCVMM history with explicit native provenance and new semantic units', () => {

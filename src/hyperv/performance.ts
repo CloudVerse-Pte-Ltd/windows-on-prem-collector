@@ -3,13 +3,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const MAX_ROWS = 1_000_000
 
 export const HYPERV_COUNTER_REGISTRY = Object.freeze({
-  'guest.cpu.usage.percent': { unit: 'percent', aggregation: 'GAUGE' },
-  'guest.memory.assigned.bytes': { unit: 'bytes', aggregation: 'GAUGE' },
-  'guest.memory.usage.percent': { unit: 'percent', aggregation: 'GAUGE' },
-  'guest.storage.iops': { unit: 'operations_per_second', aggregation: 'GAUGE' },
-  'guest.network.io.bytes_per_second': { unit: 'bytes_per_second', aggregation: 'GAUGE' },
-  'guest.storage.read.bytes_per_second': { unit: 'bytes_per_second', aggregation: 'GAUGE' },
-  'guest.storage.write.bytes_per_second': { unit: 'bytes_per_second', aggregation: 'GAUGE' },
+  'guest.cpu.usage.percent': { unit: 'percent', aggregation: 'GAUGE', min: 0, max: 100 },
+  'guest.memory.assigned.bytes': { unit: 'bytes', aggregation: 'GAUGE', min: 0 },
+  'guest.memory.usage.percent': { unit: 'percent', aggregation: 'GAUGE', min: 0, max: 100 },
+  'guest.storage.iops': { unit: 'operations_per_second', aggregation: 'GAUGE', min: 0 },
+  'guest.network.io.bytes_per_second': { unit: 'bytes_per_second', aggregation: 'GAUGE', min: 0 },
+  'guest.storage.read.bytes_per_second': { unit: 'bytes_per_second', aggregation: 'GAUGE', min: 0 },
+  'guest.storage.write.bytes_per_second': { unit: 'bytes_per_second', aggregation: 'GAUGE', min: 0 },
 } as const)
 export type HypervCounterKey = keyof typeof HYPERV_COUNTER_REGISTRY
 
@@ -36,11 +36,11 @@ export function normalizeHypervPerformanceOutput(raw: unknown) {
     const registry = HYPERV_COUNTER_REGISTRY[metricKey]
     if (!registry) throw new Error(`Hyper-V performance row ${index} has unknown counter semantic`)
     const timestamp = bounded(row.timestamp, `row ${index} timestamp`, 64); const value = Number(row.value)
-    if (!Number.isFinite(Date.parse(timestamp)) || !Number.isFinite(value)) throw new Error(`Hyper-V performance row ${index} has invalid sample`)
+    if (!Number.isFinite(Date.parse(timestamp)) || !Number.isFinite(value) || value < registry.min || ('max' in registry && value > registry.max)) throw new Error(`Hyper-V performance row ${index} has invalid sample`)
     return { vmUid: vmUid.toLowerCase(), vmName: bounded(row.vmName, `row ${index} vmName`), metricKey, timestamp: new Date(timestamp).toISOString(), value, unit: registry.unit,
       provenance: { instanceName: bounded(row.instanceName, `row ${index} instanceName`), counterPath: bounded(row.counterPath, `row ${index} counterPath`, 4096) } }
   })
-  const gaps: HypervMetricGap[] = root.gaps.map((candidate, index) => { const gap = map(candidate); return { code: bounded(gap.code, `gap ${index} code`, 128), vmUid: typeof gap.vmUid === 'string' ? gap.vmUid.toLowerCase() : undefined, metricKey: typeof gap.metricKey === 'string' ? gap.metricKey : undefined, details: map(gap.details) } })
+  const gaps: HypervMetricGap[] = root.gaps.map((candidate, index) => { const gap = map(candidate); const vmUid = typeof gap.vmUid === 'string' ? gap.vmUid.toLowerCase() : undefined; if (vmUid && !UUID.test(vmUid)) throw new Error(`Hyper-V performance gap ${index} lacks immutable VM GUID`); return { code: bounded(gap.code, `gap ${index} code`, 128), vmUid, metricKey: typeof gap.metricKey === 'string' ? gap.metricKey : undefined, details: map(gap.details) } })
   if (!facts.length && !gaps.some((gap) => gap.code === 'NO_LOCAL_HISTORY' || gap.code === 'NO_SCVMM_HISTORY')) gaps.push({ code: root.transport === 'SCVMM_PERFORMANCE_DATA' ? 'NO_SCVMM_HISTORY' : 'NO_LOCAL_HISTORY' })
   const groups = new Map<string, HypervMetricFact[]>()
   for (const fact of facts) { const key = `${fact.vmUid}|${fact.metricKey}`; groups.set(key, [...(groups.get(key) ?? []), fact]) }

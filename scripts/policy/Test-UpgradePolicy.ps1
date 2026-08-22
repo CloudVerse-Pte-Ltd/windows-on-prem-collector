@@ -14,8 +14,9 @@ foreach ($required in @(
   'Move-Item -LiteralPath $install -Destination $backup',
   'Move-Item -LiteralPath $backup -Destination $install',
   'Start-ScheduledTask -TaskName $TaskName',
-  "-Argument 'dist/src/runtime/cli.js validate collector.config.json'",
-  'Set-ScheduledTask -TaskName $TaskName -Action $originalActions',
+  "Get-ScheduledTask -TaskName `$ValidationTaskName",
+  'Collector and validation task identities must match',
+  'Start-ScheduledTask -TaskName $ValidationTaskName',
   'Upgraded collector validation failed',
   "Status='SUCCEEDED'",
   'RollbackDirectory=$backup'

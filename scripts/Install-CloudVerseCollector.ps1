@@ -118,14 +118,17 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
     & (Join-Path $InstallDirectory 'scripts\Install-CloudVerseJea.ps1') -InstallDirectory $InstallDirectory -ServiceAccount $effectiveServiceAccount -EndpointName ([string]$configuration.executionBoundary.endpointName) -CollectorMode ([string]$configuration.mode)
   }
   $action = New-ScheduledTaskAction -Execute (Join-Path $InstallDirectory 'node.exe') -Argument 'dist/src/runtime/cli.js run collector.config.json' -WorkingDirectory $InstallDirectory
+  $validationAction = New-ScheduledTaskAction -Execute (Join-Path $InstallDirectory 'node.exe') -Argument 'dist/src/runtime/cli.js validate collector.config.json' -WorkingDirectory $InstallDirectory
   $trigger = New-ScheduledTaskTrigger -AtStartup
   $settings = New-ScheduledTaskSettingsSet -RestartCount 10 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
   if ($taskPassword) {
     Register-ScheduledTask -TaskName 'CloudVerseDataCenterCollector' -Action $action -Trigger $trigger -User $effectiveServiceAccount -Password $taskPassword -RunLevel Limited -Settings $settings | Out-Null
+    Register-ScheduledTask -TaskName 'CloudVerseDataCenterCollectorValidation' -Action $validationAction -User $effectiveServiceAccount -Password $taskPassword -RunLevel Limited -Settings $settings | Out-Null
     $taskPassword = $null
   } else {
     $principal = New-ScheduledTaskPrincipal -UserId $effectiveServiceAccount -LogonType ServiceAccount -RunLevel Limited
     Register-ScheduledTask -TaskName 'CloudVerseDataCenterCollector' -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
+    Register-ScheduledTask -TaskName 'CloudVerseDataCenterCollectorValidation' -Action $validationAction -Principal $principal -Settings $settings | Out-Null
   }
   Start-ScheduledTask -TaskName 'CloudVerseDataCenterCollector'
 }

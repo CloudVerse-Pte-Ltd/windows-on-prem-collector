@@ -4,7 +4,8 @@ param(
   [Parameter(Mandatory)][ValidateScript({Test-Path $_ -PathType Leaf})][string]$PackagePath,
   [Parameter(Mandatory)][ValidatePattern('^[A-Fa-f0-9]{64}$')][string]$ExpectedPackageSha256,
   [string]$InstallDirectory = "$env:ProgramFiles\CloudVerse\DataCenterCollector",
-  [string]$TaskName = 'CloudVerseDataCenterCollector'
+  [string]$TaskName = 'CloudVerseDataCenterCollector',
+  [string]$ValidationTaskName = 'CloudVerseDataCenterCollectorValidation'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -21,6 +22,8 @@ if (-not (Test-Path $currentConfigPath -PathType Leaf)) { throw 'Installed colle
 $configuration = Get-Content -LiteralPath $currentConfigPath -Raw | ConvertFrom-Json
 if (-not $configuration.executionBoundary -or @('JEA','WDAC_APPLOCKER') -notcontains $configuration.executionBoundary.kind) { throw 'Installed execution boundary is invalid' }
 $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+$validationTask = Get-ScheduledTask -TaskName $ValidationTaskName -ErrorAction Stop
+if (-not ([string]$validationTask.Principal.UserId).Equals([string]$task.Principal.UserId, [StringComparison]::OrdinalIgnoreCase)) { throw 'Collector and validation task identities must match' }
 $parent = Split-Path $install -Parent
 $upgradeId = [Guid]::NewGuid().ToString('N')
 $staging = Join-Path $parent "DataCenterCollector.staging.$upgradeId"
@@ -29,8 +32,7 @@ $jeaModuleRoot = Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules\CloudVer
 $jeaBackup = Join-Path $parent "CloudVerseCollector.JEA.rollback.$upgradeId"
 $endpointName = if ($configuration.executionBoundary.kind -eq 'JEA') { [string]$configuration.executionBoundary.endpointName } else { $null }
 $oldAcl = Get-Acl $install
-$taskStopped = $false; $treeSwapped = $false; $taskActionChanged = $false
-$originalActions = @($task.Actions)
+$taskStopped = $false; $treeSwapped = $false
 
 function Assert-CloudVerseSignedAsset {
   param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Signer)
@@ -62,19 +64,16 @@ try {
   Move-Item -LiteralPath $staging -Destination $install; $treeSwapped = $true
   Set-Acl -Path $install -AclObject $oldAcl
   if ($endpointName) { & (Join-Path $install 'scripts\Install-CloudVerseJea.ps1') -InstallDirectory $install -ServiceAccount ([string]$task.Principal.UserId) -EndpointName $endpointName -CollectorMode ([string]$configuration.mode) }
-  $validationAction = New-ScheduledTaskAction -Execute (Join-Path $install 'node.exe') -Argument 'dist/src/runtime/cli.js validate collector.config.json' -WorkingDirectory $install
-  Set-ScheduledTask -TaskName $TaskName -Action $validationAction | Out-Null; $taskActionChanged = $true
-  Start-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+  Start-ScheduledTask -TaskName $ValidationTaskName -ErrorAction Stop
   $deadline = [DateTime]::UtcNow.AddMinutes(2)
-  do { Start-Sleep -Seconds 1; $validationTask = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop } while ($validationTask.State -eq 'Running' -and [DateTime]::UtcNow -lt $deadline)
-  $validationResult = Get-ScheduledTaskInfo -TaskName $TaskName -ErrorAction Stop
+  do { Start-Sleep -Seconds 1; $validationTask = Get-ScheduledTask -TaskName $ValidationTaskName -ErrorAction Stop } while ($validationTask.State -eq 'Running' -and [DateTime]::UtcNow -lt $deadline)
+  $validationResult = Get-ScheduledTaskInfo -TaskName $ValidationTaskName -ErrorAction Stop
   if ($validationTask.State -eq 'Running' -or $validationResult.LastTaskResult -ne 0) { throw 'Upgraded collector validation failed' }
-  Set-ScheduledTask -TaskName $TaskName -Action $originalActions | Out-Null; $taskActionChanged = $false
   Start-ScheduledTask -TaskName $TaskName -ErrorAction Stop
-  [pscustomobject]@{ Status='SUCCEEDED'; InstallDirectory=$install; RollbackDirectory=$backup; PreviousJeaModule=$jeaBackup; TaskName=$TaskName } | ConvertTo-Json -Compress
+  [pscustomobject]@{ Status='SUCCEEDED'; InstallDirectory=$install; RollbackDirectory=$backup; PreviousJeaModule=$jeaBackup; TaskName=$TaskName; ValidationTaskName=$ValidationTaskName } | ConvertTo-Json -Compress
 } catch {
   $upgradeError = $_
-  if ($taskActionChanged) { Set-ScheduledTask -TaskName $TaskName -Action $originalActions -ErrorAction SilentlyContinue | Out-Null; $taskActionChanged = $false }
+  Stop-ScheduledTask -TaskName $ValidationTaskName -ErrorAction SilentlyContinue
   if ($treeSwapped -and (Test-Path $install -PathType Container)) { Move-Item -LiteralPath $install -Destination "$staging.failed" }
   if (Test-Path $backup -PathType Container) { Move-Item -LiteralPath $backup -Destination $install }
   if ($endpointName) {

@@ -156,5 +156,28 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
     Register-ScheduledTask -TaskName 'CloudVerseDataCenterCollector' -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
     Register-ScheduledTask -TaskName 'CloudVerseDataCenterCollectorValidation' -Action $validationAction -Principal $principal -Settings $settings | Out-Null
   }
-  Start-ScheduledTask -TaskName 'CloudVerseDataCenterCollector'
+  Remove-Item -LiteralPath $validationStdout, $validationStderr -Force -ErrorAction SilentlyContinue
+  Start-ScheduledTask -TaskName 'CloudVerseDataCenterCollectorValidation' -ErrorAction Stop
+  $validationDeadline = [DateTime]::UtcNow.AddMinutes(2)
+  do {
+    Start-Sleep -Seconds 1
+    $validationTask = Get-ScheduledTask -TaskName 'CloudVerseDataCenterCollectorValidation' -ErrorAction Stop
+  } while ($validationTask.State -eq 'Running' -and [DateTime]::UtcNow -lt $validationDeadline)
+  $validationTaskInfo = Get-ScheduledTaskInfo -TaskName 'CloudVerseDataCenterCollectorValidation' -ErrorAction Stop
+  if ($validationTask.State -eq 'Running') {
+    Stop-ScheduledTask -TaskName 'CloudVerseDataCenterCollectorValidation' -ErrorAction SilentlyContinue
+    throw 'Collector service-identity validation timed out'
+  }
+  if ($validationTaskInfo.LastTaskResult -ne 0 -or -not (Test-Path $validationStdout -PathType Leaf)) {
+    throw 'Collector service identity could not validate the configured execution boundary'
+  }
+  try {
+    $validation = Get-Content -LiteralPath $validationStdout -Raw | ConvertFrom-Json
+  } catch {
+    throw 'Collector service-identity validation returned malformed output'
+  }
+  if ($validation.valid -ne $true -or ([string]$validation.mode) -ne ([string]$configuration.mode) -or ([string]$validation.managementPlaneUid) -ne ([string]$configuration.managementPlaneUid)) {
+    throw 'Collector service-identity validation did not match the installed configuration'
+  }
+  Start-ScheduledTask -TaskName 'CloudVerseDataCenterCollector' -ErrorAction Stop
 }

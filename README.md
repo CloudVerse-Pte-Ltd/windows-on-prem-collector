@@ -11,9 +11,14 @@ The install script requires its own valid Authenticode signature and an exact re
 ## Lifecycle
 
 1. Download a tagged release and verify its GitHub artifact attestation and SHA-256.
-2. Have the enterprise-approved code-signing pipeline Authenticode-sign all operational `.ps1` files and the installer, then generate the release manifest with exact script hashes and signer thumbprints.
+2. Have the enterprise-approved code-signing pipeline Authenticode-sign all operational `.ps1` files and the installer, then run `New-CloudVerseReleaseManifest.ps1` to generate `release-manifest.json` with exact post-signing script hashes and signer thumbprints. Repack the candidate contents at the ZIP root under the final name `cloudverse-windows-collector.zip`; do not add another parent directory.
 3. Configure WDAC/AppLocker or the supplied JEA boundary so Windows PowerShell reports `ConstrainedLanguage`.
 4. Run `cloudverse-windows-collector enroll` once with the short-lived enrollment token in a file. The file is consumed after successful enrollment.
 5. Run the signed installer using the exact archive digest and a dedicated service account.
+
+The candidate includes the exact Windows Node.js runtime used by CI, its license,
+production-only dependencies and an SPDX dependency SBOM. The installer rejects
+packages missing the runtime, SBOM, signed-operation set or generated release
+manifest before registering the startup task.
 
 No endpoint URL or platform credentials are entered into the CloudVerse browser wizard. The wizard creates the short-lived enrollment package; the installed in-estate agent supplies discovery/auth/health evidence over the outbound channel.

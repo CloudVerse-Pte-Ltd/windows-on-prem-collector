@@ -18,6 +18,18 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
   if (Test-Path $InstallDirectory) { throw 'Install directory already exists; use the signed upgrade procedure' }
   New-Item -ItemType Directory -Path $InstallDirectory | Out-Null
   Expand-Archive -LiteralPath $package -DestinationPath $InstallDirectory
+  foreach ($relative in @(
+    'node.exe',
+    'dist\src\runtime\cli.js',
+    'scripts\operations\Discover-Scvmm.ps1',
+    'scripts\operations\Collect-ScvmmInventory.ps1',
+    'scripts\operations\Collect-HypervCimInventory.ps1',
+    'scripts\operations\Collect-HypervPerformance.ps1',
+    'release-manifest.json',
+    'cloudverse-windows-collector.spdx.json'
+  )) {
+    if (-not (Test-Path (Join-Path $InstallDirectory $relative) -PathType Leaf)) { throw "Release package is incomplete: $relative" }
+  }
   Copy-Item -LiteralPath $ConfigFile -Destination (Join-Path $InstallDirectory 'collector.config.json')
   $acl = Get-Acl $InstallDirectory
   $acl.SetAccessRuleProtection($true, $false)

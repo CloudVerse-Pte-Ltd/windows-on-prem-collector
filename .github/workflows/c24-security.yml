@@ -42,7 +42,8 @@ jobs:
             if ($errors.Count -gt 0) { throw "PowerShell parser rejected $script`: $($errors.Message -join '; ')" }
           }
           foreach ($dataFile in @('./scripts/jea/CloudVerseCollector/1.0.0/CloudVerseCollector.psd1','./scripts/jea/CloudVerseCollector/1.0.0/RoleCapabilities/CloudVerseCollector.psrc')) {
-            if (-not (Test-PowerShellDataFile $dataFile)) { throw "PowerShell data file is invalid: $dataFile" }
+            $data = Import-PowerShellDataFile $dataFile
+            if (-not $data -or -not $data.GUID) { throw "PowerShell data file is invalid: $dataFile" }
           }
       - name: Prove unsigned source cannot pass the release signature gate
         shell: powershell

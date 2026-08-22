@@ -9,6 +9,7 @@ import { ConstrainedPowerShellRunner } from '../security/powershell-runner.js'
 import { EncryptedWindowsSpool, WindowsSpoolUploader } from './encrypted-spool.js'
 import { statePaths, type WindowsCollectorIdentity } from './enrollment.js'
 import { WindowsBundleSigner } from './signed-bundle.js'
+import { collectionFailureHealth, collectionSuccessHealth, initialRuntimeHealth, RuntimeHealthStore, type CollectorRuntimeHealth } from './runtime-health.js'
 
 export interface WindowsCollectorConfig { stateDirectory: string; spoolDirectory: string; scriptsDirectory: string; manifestPath: string; managementPlaneUid: string; mode: 'SCVMM' | 'LOCAL_HYPERV'; executionBoundary: { kind: 'JEA'; endpointName: string } | { kind: 'WDAC_APPLOCKER' }; scvmm?: { server: string; port: number }; upload?: { endpoint: string; allowedHosts: string[]; privateAddressAllowedHosts?: string[] }; intervalSeconds: number; maxSpoolBytes: number; maxSpoolItems: number; offlineExportDirectory?: string }
 export async function loadWindowsCollectorConfig(path: string): Promise<WindowsCollectorConfig> {
@@ -33,10 +34,32 @@ export async function collectPerformanceForMode(mode: WindowsCollectorConfig['mo
 }
 
 export class WindowsCollectorRuntime {
-  constructor(private readonly config: WindowsCollectorConfig, private readonly runner: ConstrainedPowerShellRunner, private readonly spool: EncryptedWindowsSpool, private readonly signer: WindowsBundleSigner, private readonly identity: WindowsCollectorIdentity, private readonly uploader?: WindowsSpoolUploader) {}
+  private health: CollectorRuntimeHealth
+  constructor(private readonly config: WindowsCollectorConfig, private readonly runner: ConstrainedPowerShellRunner, private readonly spool: EncryptedWindowsSpool, private readonly signer: WindowsBundleSigner, private readonly identity: WindowsCollectorIdentity, private readonly uploader?: WindowsSpoolUploader, private readonly healthStore = new RuntimeHealthStore(config.stateDirectory), private readonly clock = () => new Date(), private readonly delay = abortableDelay) { this.health = initialRuntimeHealth(this.clock()) }
   async collectOnce(now = new Date()) { const collectionRunId = randomUUID(); const context = { connectorVersion: process.env.COLLECTOR_VERSION ?? '0.1.0', collectionRunId, collectedAt: now.toISOString() }; const inventory = this.config.mode === 'SCVMM' ? await new ScvmmInventoryAdapter(this.runner).collect(this.config.scvmm!, context) : await new HypervCimInventoryAdapter(this.runner).collect(context); const performance = await collectPerformanceForMode(this.config.mode, this.runner); const inventoryEnvelope = toHypervInventoryEnvelope(this.identity.integrationId, this.config.managementPlaneUid, inventory); const telemetryEnvelope = toHypervTelemetryEnvelope(this.identity.integrationId, this.config.managementPlaneUid, now.toISOString(), performance.facts, performance.gaps); const bundle = this.signer.create(collectionRunId, toHypervCollectionPayload(inventoryEnvelope, telemetryEnvelope), now); await this.spool.enqueue(bundle.bundleId, bundle.schemaVersion, Buffer.from(JSON.stringify(bundle))); return { collectionRunId, bundleId: bundle.bundleId } }
   async flush() { if (this.uploader) return this.uploader.flushOnce(); if (!this.config.offlineExportDirectory) return { sent: 0 }; await mkdir(this.config.offlineExportDirectory, { recursive: true }); let sent = 0; for (const item of await this.spool.list()) { if (!this.spool.accepts(item.schemaVersion)) continue; await writeFile(join(this.config.offlineExportDirectory, `${item.queueId}.${item.bundleId}.bundle`), item.payload, { flag: 'wx', mode: 0o600 }); await this.spool.remove(item.queueId); sent++ } return { sent } }
-  async run(signal?: AbortSignal) { await this.runner.initialize(); do { await this.collectOnce(); await this.flush(); if (signal?.aborted) break; await new Promise((resolve) => setTimeout(resolve, this.config.intervalSeconds * 1000)) } while (!signal?.aborted) }
+  async run(signal?: AbortSignal) {
+    this.health = await this.healthStore.read() ?? this.health
+    await this.healthStore.write(this.health)
+    try { await this.runner.initialize() } catch (error) { const now = this.clock(); this.health = collectionFailureHealth(this.health, now, now, error); await this.healthStore.write(this.health); throw error }
+    while (!signal?.aborted) {
+      const attemptedAt = this.clock()
+      let waitMilliseconds = this.config.intervalSeconds * 1000
+      try {
+        await this.collectOnce(attemptedAt)
+        this.health = collectionSuccessHealth(this.health, attemptedAt)
+      } catch (error) {
+        waitMilliseconds = collectionRetryDelay(this.health.consecutiveCollectionFailures + 1, this.config.intervalSeconds)
+        this.health = collectionFailureHealth(this.health, attemptedAt, new Date(attemptedAt.valueOf() + waitMilliseconds), error)
+      }
+      await this.healthStore.write(this.health)
+      await this.flush()
+      if (!signal?.aborted) await this.delay(waitMilliseconds, signal)
+    }
+  }
 }
+
+export function collectionRetryDelay(failureCount: number, intervalSeconds: number) { return Math.min(intervalSeconds * 1000, 5_000 * 2 ** Math.min(Math.max(failureCount - 1, 0), 6)) }
+async function abortableDelay(milliseconds: number, signal?: AbortSignal) { await new Promise<void>((resolve) => { const timer = setTimeout(resolve, milliseconds); signal?.addEventListener('abort', () => { clearTimeout(timer); resolve() }, { once: true }) }) }
 
 export async function createWindowsCollectorRuntime(config: WindowsCollectorConfig) { const paths = statePaths(config.stateDirectory); const identity = JSON.parse(await readFile(paths.identity, 'utf8')) as WindowsCollectorIdentity; const runner = new ConstrainedPowerShellRunner({ scriptsDirectory: config.scriptsDirectory, manifestPath: config.manifestPath, jeaEndpointName: config.executionBoundary.kind === 'JEA' ? config.executionBoundary.endpointName : undefined, allowedScvmmEndpoints: config.scvmm ? [config.scvmm] : [] }); const spool = new EncryptedWindowsSpool({ directory: config.spoolDirectory, key: Buffer.from((await readFile(paths.spoolKey, 'utf8')).trim(), 'base64'), maxBytes: config.maxSpoolBytes, maxItems: config.maxSpoolItems, acceptedSchemaVersions: ['1.0'] }); const signer = new WindowsBundleSigner(await readFile(paths.privateKey, 'utf8'), { orgId: identity.orgId, collectorId: identity.collectorId, signatureKeyId: identity.keyId }); const uploader = config.upload ? new WindowsSpoolUploader(spool, { ...config.upload, bearerToken: (await readFile(paths.transportToken, 'utf8')).trim() }) : undefined; return new WindowsCollectorRuntime(config, runner, spool, signer, identity, uploader) }

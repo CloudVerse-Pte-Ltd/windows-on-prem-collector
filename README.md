@@ -24,3 +24,5 @@ packages missing the runtime, SBOM, signed-operation set or generated release
 manifest before registering the startup task.
 
 No endpoint URL or platform credentials are entered into the CloudVerse browser wizard. The wizard creates the short-lived enrollment package; the installed in-estate agent supplies discovery/auth/health evidence over the outbound channel.
+
+Forward collection survives transient inventory/counter failures without creating synthetic inventory or metric facts. Each failed cycle is written atomically to the ACL-protected `runtime-health.json` with a redacted error, active gap start, retry time and consecutive failure count. Retry uses bounded exponential backoff capped by the configured collection interval, queued bundles continue to flush, and the most recently recovered gap remains durable after collection succeeds.

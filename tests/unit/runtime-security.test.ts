@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { EncryptedWindowsSpool, WindowsSpoolUploader } from '../../src/runtime/encrypted-spool.js'
 import { enrollWindowsCollector, statePaths } from '../../src/runtime/enrollment.js'
 import { canonicalBundleJson, WindowsBundleSigner } from '../../src/runtime/signed-bundle.js'
-import { collectPerformanceForMode } from '../../src/runtime/collector-runtime.js'
+import { collectionRetryDelay, collectPerformanceForMode, WindowsCollectorRuntime, type WindowsCollectorConfig } from '../../src/runtime/collector-runtime.js'
+import { initialRuntimeHealth, RuntimeHealthStore, type CollectorRuntimeHealth } from '../../src/runtime/runtime-health.js'
 
 describe('Windows collector runtime security', () => {
   it('enrolls with public material and never sends generated secrets', async () => {
@@ -60,6 +61,36 @@ describe('Windows collector runtime security', () => {
     expect(runner.runLocalHypervPerformance).not.toHaveBeenCalled()
     expect(result.facts).toEqual([])
     expect(result.gaps).toEqual([expect.objectContaining({ code: 'HOST_LEVEL_PERFORMANCE_COLLECTOR_REQUIRED', details: expect.objectContaining({ localHostCountersRejected: true }) })])
+  })
+
+  it('persists a redacted collection gap, retries, and recovers without emitting a failed-cycle bundle', async () => {
+    const config: WindowsCollectorConfig = { stateDirectory: 'state', spoolDirectory: 'spool', scriptsDirectory: 'scripts', manifestPath: 'manifest', managementPlaneUid: 'hyperv:018f6e32-4f14-7c1f-aab2-90a7ac957011', mode: 'LOCAL_HYPERV', executionBoundary: { kind: 'JEA', endpointName: 'CloudVerseCollector' }, intervalSeconds: 60, maxSpoolBytes: 1_000_000, maxSpoolItems: 10, offlineExportDirectory: 'export' }
+    const runner = { initialize: vi.fn(async () => undefined) } as any
+    const writes: CollectorRuntimeHealth[] = []; const healthStore = { path: 'health', read: vi.fn(async () => undefined), write: vi.fn(async (health: CollectorRuntimeHealth) => { writes.push(structuredClone(health)) }) } as any
+    const controller = new AbortController(); let delays = 0
+    const runtime = new WindowsCollectorRuntime(config, runner, {} as any, {} as any, {} as any, undefined, healthStore, () => new Date('2026-08-22T03:00:00Z'), async () => { if (++delays === 2) controller.abort() })
+    const collect = vi.spyOn(runtime, 'collectOnce').mockRejectedValueOnce(new Error('token=customer-secret connection failed')).mockResolvedValueOnce({ collectionRunId: '018f6e32-4f14-7c1f-aab2-90a7ac957012', bundleId: 'bundle' })
+    const flush = vi.spyOn(runtime, 'flush').mockResolvedValue({ sent: 0 })
+    await runtime.run(controller.signal)
+    expect(collect).toHaveBeenCalledTimes(2); expect(flush).toHaveBeenCalledTimes(2)
+    expect(writes[1]).toMatchObject({ status: 'DEGRADED', consecutiveCollectionFailures: 1, collectionGapStartedAt: '2026-08-22T03:00:00.000Z' })
+    expect(writes[1]!.lastError).toBe('token=[REDACTED] connection failed')
+    expect(writes[2]).toMatchObject({ status: 'HEALTHY', consecutiveCollectionFailures: 0, collectionGapStartedAt: null, lastError: null,
+      lastRecoveredCollectionGap: { startedAt: '2026-08-22T03:00:00.000Z', recoveredAt: '2026-08-22T03:00:00.000Z', failedAttempts: 1 } })
+  })
+
+  it('bounds collection retry backoff by the configured collection interval', () => {
+    expect(collectionRetryDelay(1, 300)).toBe(5_000)
+    expect(collectionRetryDelay(4, 300)).toBe(40_000)
+    expect(collectionRetryDelay(20, 60)).toBe(60_000)
+  })
+
+  it('atomically persists and reloads runtime health across process restarts', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'cv-win-health-')); const store = new RuntimeHealthStore(directory)
+    const health = initialRuntimeHealth(new Date('2026-08-22T03:00:00Z')); health.status = 'DEGRADED'; health.consecutiveCollectionFailures = 2
+    await store.write(health)
+    await expect(store.read()).resolves.toEqual(health)
+    expect((await import('node:fs/promises').then(({ readdir }) => readdir(directory))).filter((name) => name.endsWith('.tmp'))).toEqual([])
   })
 
   it('retains encrypted bundles across DNS failure and recovers without restart', async () => {

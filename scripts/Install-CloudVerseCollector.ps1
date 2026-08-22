@@ -68,7 +68,7 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
   $effectiveServiceAccount = $ServiceAccount
   $taskPassword = $null
   if ($configuration.mode -eq 'LOCAL_HYPERV' -and $configuration.executionBoundary.kind -eq 'JEA') {
-    if ($ServiceAccount -ne 'CloudVerseCollectorSvc') { throw 'LOCAL_HYPERV JEA requires the installer-managed CloudVerseCollectorSvc identity' }
+    if ($ServiceAccount -ne 'CloudVerseCollector') { throw 'LOCAL_HYPERV JEA requires the installer-managed CloudVerseCollector identity' }
     if (Get-LocalUser -Name $ServiceAccount -ErrorAction SilentlyContinue) { throw 'The installer-managed local collector identity already exists' }
     $random = [byte[]]::new(32)
     $randomNumberGenerator = [Security.Cryptography.RandomNumberGenerator]::Create()

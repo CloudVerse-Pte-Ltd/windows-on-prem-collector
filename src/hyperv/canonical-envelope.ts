@@ -16,9 +16,6 @@ const PLANE_UID = /^(?:scvmm|hyperv):[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[8
 const NATIVE_METRIC: Record<string, string> = {
   'guest.cpu.usage.percent': 'hyperv.virtual_processor.total_run_time',
   'guest.memory.assigned.bytes': 'hyperv.dynamic_memory.physical_memory',
-  'guest.memory.usage.percent': 'scvmm.MemoryUsage',
-  'guest.storage.iops': 'scvmm.StorageIOPSUsage',
-  'guest.network.io.bytes_per_second': 'scvmm.NetworkIOUsage',
   'guest.storage.read.bytes_per_second': 'hyperv.virtual_storage.read_bytes_per_second',
   'guest.storage.write.bytes_per_second': 'hyperv.virtual_storage.write_bytes_per_second',
 }

@@ -2,7 +2,7 @@
 
 Outbound-only collector for Microsoft Hyper-V and System Center Virtual Machine Manager. It inventories immutable host/VM/storage/network topology, captures Hyper-V performance counters, creates Ed25519-signed canonical bundles, encrypts its bounded local spool with AES-256-GCM, and uploads to the CloudVerse control plane or exports signed bundles for offline import.
 
-SCVMM mode collects VM CPU, dynamic-memory, storage-IOPS and network-IO history through the documented read-only `Get-SCPerformanceData` API, always keyed by the immutable VMM VM GUID. Missing history, failed counters, invalid values and static-memory semantics become explicit metric gaps; local host counters are never attributed to a remote VMM estate.
+SCVMM mode supplies inventory only. Hyper-V performance is deliberately collected at the host boundary, where native counter instances can be reconciled to immutable VM GUIDs. An SCVMM-only worker emits an explicit host-collector-required gap and never attributes its own local counters to the managed estate.
 
 ## Trust boundary
 

@@ -31,18 +31,4 @@ describe('C32 Hyper-V performance normalization', () => {
     expect(() => normalizeHypervPerformanceOutput(raw([], [{ code: 'COUNTER_UNAVAILABLE', vmUid: 'vm-name' }]))).toThrow('immutable VM GUID')
   })
 
-  it('accepts SCVMM history with explicit native provenance and new semantic units', () => {
-    const result = normalizeHypervPerformanceOutput({
-      ...raw([], []), transport: 'SCVMM_PERFORMANCE_DATA', historyAvailable: true,
-      rows: [
-        { ...sample('vm01', 71, '2026-08-22T00:00:00Z'), metricKey: 'guest.memory.usage.percent', instanceName: vmUid, counterPath: 'SCVMM:Get-SCPerformanceData/MemoryUsage/Hour/latest' },
-        { ...sample('vm01', 42, '2026-08-22T00:00:00Z'), metricKey: 'guest.storage.iops', instanceName: vmUid, counterPath: 'SCVMM:Get-SCPerformanceData/StorageIOPSUsage/Hour/latest' },
-      ],
-    })
-    expect(result.facts).toEqual(expect.arrayContaining([
-      expect.objectContaining({ metricKey: 'guest.memory.usage.percent', unit: 'percent', value: 71 }),
-      expect.objectContaining({ metricKey: 'guest.storage.iops', unit: 'operations_per_second', value: 42 }),
-    ]))
-    expect(result.history).toBe('AVAILABLE')
-  })
 })

@@ -54,10 +54,12 @@ describe('Windows collector runtime security', () => {
     await expect(enrollWindowsCollector({ controlPlaneUrl: 'http://cpd.example.test', orgId: 1, integrationId: 1, enrollmentToken: 'x', stateDirectory: 'unused' })).rejects.toThrow('HTTPS')
   })
 
-  it('does not misattribute local Hyper-V counters when SCVMM lacks endpoint context', async () => {
+  it('keeps SCVMM inventory separate from host-level performance evidence', async () => {
     const runner = { runLocalHypervPerformance: vi.fn() } as any
-    await expect(collectPerformanceForMode('SCVMM', runner)).rejects.toThrow('configured endpoint')
+    const result = await collectPerformanceForMode('SCVMM', runner)
     expect(runner.runLocalHypervPerformance).not.toHaveBeenCalled()
+    expect(result.facts).toEqual([])
+    expect(result.gaps).toEqual([expect.objectContaining({ code: 'HOST_LEVEL_PERFORMANCE_COLLECTOR_REQUIRED', details: expect.objectContaining({ localHostCountersRejected: true }) })])
   })
 
   it('retains encrypted bundles across DNS failure and recovers without restart', async () => {

@@ -56,10 +56,6 @@ export class ConstrainedPowerShellRunner {
     return this.runScvmmOperation('scvmm.inventory.v1', parameters)
   }
 
-  async runScvmmPerformance(parameters: unknown) {
-    return this.runScvmmOperation('scvmm.performance.v1', parameters)
-  }
-
   async runLocalHypervCimInventory() {
     if (!this.manifest) throw new Error('PowerShell runner is not initialized')
     const operation = COMMAND_CATALOG['hyperv.cim.inventory.v1']; const scriptPath = await this.scriptPath(operation.script)

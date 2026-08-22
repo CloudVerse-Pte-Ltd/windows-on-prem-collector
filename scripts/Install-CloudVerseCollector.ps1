@@ -24,7 +24,6 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
     'dist\src\runtime\cli.js',
     'scripts\operations\Discover-Scvmm.ps1',
     'scripts\operations\Collect-ScvmmInventory.ps1',
-    'scripts\operations\Collect-ScvmmPerformance.ps1',
     'scripts\operations\Collect-HypervCimInventory.ps1',
     'scripts\operations\Collect-HypervPerformance.ps1',
     'release-manifest.json',

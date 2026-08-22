@@ -1,6 +1,6 @@
 import { isIP } from 'node:net'
 
-export type OperationId = 'scvmm.discovery.v1' | 'scvmm.inventory.v1' | 'scvmm.performance.v1' | 'hyperv.cim.inventory.v1' | 'hyperv.performance.v1'
+export type OperationId = 'scvmm.discovery.v1' | 'scvmm.inventory.v1' | 'hyperv.cim.inventory.v1' | 'hyperv.performance.v1'
 
 export interface ScvmmDiscoveryParameters {
   server: string
@@ -24,12 +24,6 @@ export const COMMAND_CATALOG = Object.freeze({
       'Get-SCVMCheckpoint', 'Get-SCVMHost', 'Get-SCVMHostCluster', 'Get-SCVMHostGroup', 'Get-SCVMNetwork',
       'Get-SCVMTemplate', 'Get-SCVMMServer', 'Import-Module', 'Select-Object', 'Set-StrictMode',
     ]),
-    parameters: Object.freeze(['server', 'port']),
-  }),
-  'scvmm.performance.v1': Object.freeze({
-    script: 'Collect-ScvmmPerformance.ps1',
-    jeaFunction: 'Invoke-CloudVerseScvmmPerformance',
-    allowedCommands: Object.freeze(['ConvertTo-Json', 'Get-SCPerformanceData', 'Get-SCVirtualMachine', 'Get-SCVMMServer', 'Import-Module', 'Set-StrictMode']),
     parameters: Object.freeze(['server', 'port']),
   }),
   'hyperv.cim.inventory.v1': Object.freeze({

@@ -65,6 +65,18 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
   if (-not [IO.Path]::GetFullPath([string]$configuration.manifestPath).Equals([IO.Path]::GetFullPath($expectedManifestPath), [StringComparison]::OrdinalIgnoreCase)) { throw 'manifestPath must select the immutable packaged release manifest' }
   $planePattern = if ($configuration.mode -eq 'SCVMM') { '^scvmm:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' } elseif ($configuration.mode -eq 'LOCAL_HYPERV') { '^hyperv:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$' } else { throw 'Collector mode is invalid' }
   if (([string]$configuration.managementPlaneUid) -notmatch $planePattern) { throw 'Collector mode and immutable management-plane UUID do not match' }
+  $effectiveServiceAccount = $ServiceAccount
+  $taskPassword = $null
+  if ($configuration.mode -eq 'LOCAL_HYPERV' -and $configuration.executionBoundary.kind -eq 'JEA') {
+    if ($ServiceAccount -ne 'CloudVerseCollectorSvc') { throw 'LOCAL_HYPERV JEA requires the installer-managed CloudVerseCollectorSvc identity' }
+    if (Get-LocalUser -Name $ServiceAccount -ErrorAction SilentlyContinue) { throw 'The installer-managed local collector identity already exists' }
+    $random = [byte[]]::new(32)
+    [Security.Cryptography.RandomNumberGenerator]::Fill($random)
+    $taskPassword = 'Cv1!' + [Convert]::ToBase64String($random).Replace('+','A').Replace('/','B').TrimEnd('=')
+    $secureTaskPassword = ConvertTo-SecureString $taskPassword -AsPlainText -Force
+    New-LocalUser -Name $ServiceAccount -Password $secureTaskPassword -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword -Description 'CloudVerse local Hyper-V collector service identity' | Out-Null
+    $effectiveServiceAccount = "$env:COMPUTERNAME\$ServiceAccount"
+  }
   if ($configuration.executionBoundary.kind -eq 'JEA') {
     if ([string]::IsNullOrWhiteSpace([string]$configuration.executionBoundary.endpointName)) { throw 'JEA endpoint name is required' }
     $jeaFiles = @(
@@ -99,15 +111,20 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
       if ($a.Equals($b, [StringComparison]::OrdinalIgnoreCase) -or $a.StartsWith($b + '\', [StringComparison]::OrdinalIgnoreCase) -or $b.StartsWith($a + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Writable data directories must be distinct and non-overlapping' }
     }
   }
-  Set-CloudVerseAcl -Path $InstallDirectory -Identity $ServiceAccount -Rights 'ReadAndExecute'
-  foreach ($directory in $dataDirectories) { Set-CloudVerseAcl -Path $directory -Identity $ServiceAccount -Rights 'Modify' }
+  Set-CloudVerseAcl -Path $InstallDirectory -Identity $effectiveServiceAccount -Rights 'ReadAndExecute'
+  foreach ($directory in $dataDirectories) { Set-CloudVerseAcl -Path $directory -Identity $effectiveServiceAccount -Rights 'Modify' }
   if ($configuration.executionBoundary.kind -eq 'JEA') {
-    & (Join-Path $InstallDirectory 'scripts\Install-CloudVerseJea.ps1') -InstallDirectory $InstallDirectory -ServiceAccount $ServiceAccount -EndpointName ([string]$configuration.executionBoundary.endpointName) -CollectorMode ([string]$configuration.mode)
+    & (Join-Path $InstallDirectory 'scripts\Install-CloudVerseJea.ps1') -InstallDirectory $InstallDirectory -ServiceAccount $effectiveServiceAccount -EndpointName ([string]$configuration.executionBoundary.endpointName) -CollectorMode ([string]$configuration.mode)
   }
   $action = New-ScheduledTaskAction -Execute (Join-Path $InstallDirectory 'node.exe') -Argument 'dist/src/runtime/cli.js run collector.config.json' -WorkingDirectory $InstallDirectory
   $trigger = New-ScheduledTaskTrigger -AtStartup
-  $principal = New-ScheduledTaskPrincipal -UserId $ServiceAccount -LogonType ServiceAccount -RunLevel Limited
   $settings = New-ScheduledTaskSettingsSet -RestartCount 10 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
-  Register-ScheduledTask -TaskName 'CloudVerseDataCenterCollector' -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
+  if ($taskPassword) {
+    Register-ScheduledTask -TaskName 'CloudVerseDataCenterCollector' -Action $action -Trigger $trigger -User $effectiveServiceAccount -Password $taskPassword -RunLevel Limited -Settings $settings | Out-Null
+    $taskPassword = $null
+  } else {
+    $principal = New-ScheduledTaskPrincipal -UserId $effectiveServiceAccount -LogonType ServiceAccount -RunLevel Limited
+    Register-ScheduledTask -TaskName 'CloudVerseDataCenterCollector' -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
+  }
   Start-ScheduledTask -TaskName 'CloudVerseDataCenterCollector'
 }

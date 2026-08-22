@@ -42,10 +42,10 @@ jobs:
           New-Item -ItemType Directory release/cloudverse-windows-collector/scripts/operations -Force | Out-Null
           Copy-Item scripts/operations/*.ps1 release/cloudverse-windows-collector/scripts/operations
           Copy-Item scripts/jea release/cloudverse-windows-collector/scripts/jea -Recurse
-          Copy-Item scripts/Install-CloudVerseCollector.ps1, scripts/Install-CloudVerseJea.ps1, scripts/New-CloudVerseReleaseManifest.ps1 release/cloudverse-windows-collector/scripts
+          Copy-Item scripts/Install-CloudVerseCollector.ps1, scripts/Install-CloudVerseJea.ps1, scripts/Update-CloudVerseCollector.ps1, scripts/New-CloudVerseReleaseManifest.ps1 release/cloudverse-windows-collector/scripts
           @'
           This is an unsigned signing candidate, not an installable production release.
-          An enterprise-approved pipeline must Authenticode-sign the installer and every
+          An enterprise-approved pipeline must Authenticode-sign the installer, upgrade script, and every
           operational script and every packaged JEA .ps1/.psm1/.psd1/.psrc asset
           with the same certificate, generate release-manifest.json, then assemble and attest
           the final archive. Source checkout signatures are intentionally absent.

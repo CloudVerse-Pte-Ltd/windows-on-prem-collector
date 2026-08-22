@@ -48,11 +48,15 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
     'scripts\operations\Collect-HypervCimInventory.ps1',
     'scripts\operations\Collect-HypervPerformance.ps1',
     'release-manifest.json',
-    'cloudverse-windows-collector.spdx.json'
+    'cloudverse-windows-collector.spdx.json',
+    'scripts\Update-CloudVerseCollector.ps1'
   )) {
     if (-not (Test-Path (Join-Path $InstallDirectory $relative) -PathType Leaf)) { throw "Release package is incomplete: $relative" }
   }
   Copy-Item -LiteralPath $ConfigFile -Destination (Join-Path $InstallDirectory 'collector.config.json')
+  $upgradeSignature = Get-AuthenticodeSignature -LiteralPath (Join-Path $InstallDirectory 'scripts\Update-CloudVerseCollector.ps1')
+  $upgradeThumbprint = if ($upgradeSignature.SignerCertificate) { $upgradeSignature.SignerCertificate.Thumbprint.ToUpperInvariant() } else { '' }
+  if ($upgradeSignature.Status -ne 'Valid' -or $upgradeThumbprint -ne $approvedSignerThumbprint) { throw 'Upgrade script is not signed by the installer signer' }
   $configuration = Get-Content -LiteralPath (Join-Path $InstallDirectory 'collector.config.json') -Raw | ConvertFrom-Json
   if (-not $configuration.executionBoundary -or @('JEA','WDAC_APPLOCKER') -notcontains $configuration.executionBoundary.kind) { throw 'Configuration must select an explicit JEA or WDAC/AppLocker execution boundary' }
   $expectedScriptsDirectory = Join-Path $InstallDirectory 'scripts\operations'

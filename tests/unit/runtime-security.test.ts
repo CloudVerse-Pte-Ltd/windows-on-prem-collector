@@ -68,7 +68,7 @@ describe('Windows collector runtime security', () => {
     const runner = { initialize: vi.fn(async () => undefined) } as any
     const writes: CollectorRuntimeHealth[] = []; const healthStore = { path: 'health', read: vi.fn(async () => undefined), write: vi.fn(async (health: CollectorRuntimeHealth) => { writes.push(structuredClone(health)) }) } as any
     const controller = new AbortController(); let delays = 0
-    const runtime = new WindowsCollectorRuntime(config, runner, {} as any, {} as any, {} as any, undefined, healthStore, () => new Date('2026-08-22T03:00:00Z'), async () => { if (++delays === 2) controller.abort() })
+    const runtime = new WindowsCollectorRuntime(config, runner, { acceptedSchemas: () => ['1.0', '0.9'] } as any, {} as any, {} as any, undefined, healthStore, () => new Date('2026-08-22T03:00:00Z'), async () => { if (++delays === 2) controller.abort() })
     const collect = vi.spyOn(runtime, 'collectOnce').mockRejectedValueOnce(new Error('token=customer-secret connection failed')).mockResolvedValueOnce({ collectionRunId: '018f6e32-4f14-7c1f-aab2-90a7ac957012', bundleId: 'bundle' })
     const flush = vi.spyOn(runtime, 'flush').mockResolvedValue({ sent: 0 })
     await runtime.run(controller.signal)
@@ -83,6 +83,13 @@ describe('Windows collector runtime security', () => {
     expect(collectionRetryDelay(1, 300)).toBe(5_000)
     expect(collectionRetryDelay(4, 300)).toBe(40_000)
     expect(collectionRetryDelay(20, 60)).toBe(60_000)
+  })
+
+  it('validates the signed execution boundary and reports upgrade compatibility without collecting', async () => {
+    const runner = { initialize: vi.fn(async () => undefined) } as any; const collect = vi.fn()
+    const runtime = new WindowsCollectorRuntime({ stateDirectory: 'state', spoolDirectory: 'spool', scriptsDirectory: 'scripts', manifestPath: 'manifest', managementPlaneUid: 'hyperv:018f6e32-4f14-7c1f-aab2-90a7ac957011', mode: 'LOCAL_HYPERV', executionBoundary: { kind: 'JEA', endpointName: 'CloudVerseCollector' }, intervalSeconds: 60, maxSpoolBytes: 1_000_000, maxSpoolItems: 10, offlineExportDirectory: 'export' }, runner, { acceptedSchemas: () => ['1.0', '0.9'], enqueue: collect } as any, {} as any, {} as any)
+    await expect(runtime.validate()).resolves.toEqual({ valid: true, mode: 'LOCAL_HYPERV', managementPlaneUid: 'hyperv:018f6e32-4f14-7c1f-aab2-90a7ac957011', acceptedBundleSchemas: ['1.0', '0.9'] })
+    expect(runner.initialize).toHaveBeenCalledOnce(); expect(collect).not.toHaveBeenCalled()
   })
 
   it('atomically persists and reloads runtime health across process restarts', async () => {

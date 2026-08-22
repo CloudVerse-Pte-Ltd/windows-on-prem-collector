@@ -53,7 +53,20 @@ export class ConstrainedPowerShellRunner {
   }
 
   async runScvmmInventory(parameters: unknown) {
-    return this.runScvmmOperation('scvmm.inventory.v1', parameters)
+    const families = ['hostGroups', 'clusters', 'hosts', 'virtualMachines', 'templates', 'checkpoints', 'storageArrays', 'storagePools', 'logicalNetworks', 'vmNetworks'] as const
+    const combined: Record<string, unknown> = {}; for (const family of families) combined[family] = []
+    for (let pageNumber = 0; pageNumber <= 50; pageNumber++) {
+      const page = await this.runScvmmOperation('scvmm.inventory.v1', parameters, ['-PageNumber', String(pageNumber), '-PageSize', '2000']) as Record<string, unknown>
+      const metadata = page.page as Record<string, unknown> | undefined
+      if (!metadata || metadata.number !== pageNumber || metadata.size !== 2000 || typeof metadata.hasMore !== 'boolean') throw new Error('SCVMM inventory page metadata is invalid')
+      for (const family of families) {
+        if (!Array.isArray(page[family])) throw new Error(`SCVMM inventory page ${family} is invalid`)
+        ;(combined[family] as unknown[]).push(...page[family] as unknown[])
+      }
+      for (const field of ['schemaVersion', 'capability', 'platform', 'mutationAttempted']) if (pageNumber === 0) combined[field] = page[field]; else if (page[field] !== combined[field]) throw new Error('SCVMM inventory page contract changed during collection')
+      if (!metadata.hasMore) return combined
+    }
+    throw new Error('SCVMM inventory exceeded the 100,000-VM page bound')
   }
 
   async runLocalHypervCimInventory() {
@@ -82,13 +95,13 @@ export class ConstrainedPowerShellRunner {
     } catch (error) { throw new Error(redactWindowsCollectorError(error)) }
   }
 
-  private async runScvmmOperation(operationId: OperationId, parameters: unknown) {
+  private async runScvmmOperation(operationId: OperationId, parameters: unknown, fixedParameters: string[] = []) {
     if (!this.manifest) throw new Error('PowerShell runner is not initialized')
     const value = validateScvmmDiscoveryParameters(parameters)
     if (!(this.options.allowedScvmmEndpoints ?? []).some((endpoint) => endpoint.server.toLowerCase() === value.server.toLowerCase() && endpoint.port === value.port)) throw new Error('SCVMM endpoint is not allowlisted')
     const operation = COMMAND_CATALOG[operationId]; const scriptPath = await this.scriptPath(operation.script)
     try {
-      const result = await this.executor(this.powershellPath, this.operationArguments(operation.jeaFunction, scriptPath, ['-Server', value.server, '-Port', String(value.port)]), {
+      const result = await this.executor(this.powershellPath, this.operationArguments(operation.jeaFunction, scriptPath, ['-Server', value.server, '-Port', String(value.port), ...fixedParameters]), {
         timeout: this.options.timeoutMs ?? 120_000, maxBuffer: 10 * 1024 * 1024, windowsHide: true,
       })
       if (result.stderr.trim()) throw new Error(result.stderr)

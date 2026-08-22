@@ -14,8 +14,8 @@ function Invoke-CloudVerseScvmmDiscovery {
 }
 function Invoke-CloudVerseScvmmInventory {
   [CmdletBinding()]
-  param([Parameter(Mandatory)][ValidateLength(1,253)][string]$Server, [Parameter(Mandatory)][ValidateRange(1,65535)][int]$Port)
-  & (Join-Path $operations 'Collect-ScvmmInventory.ps1') -Server $Server -Port $Port
+  param([Parameter(Mandatory)][ValidateLength(1,253)][string]$Server, [Parameter(Mandatory)][ValidateRange(1,65535)][int]$Port, [Parameter(Mandatory)][ValidateRange(0,50)][int]$PageNumber, [Parameter(Mandatory)][ValidateRange(100,2000)][int]$PageSize)
+  & (Join-Path $operations 'Collect-ScvmmInventory.ps1') -Server $Server -Port $Port -PageNumber $PageNumber -PageSize $PageSize
 }
 function Invoke-CloudVerseHypervInventory {
   [CmdletBinding()]

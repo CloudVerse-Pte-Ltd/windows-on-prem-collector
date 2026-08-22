@@ -8,7 +8,7 @@ import { COMMAND_CATALOG, ConstrainedPowerShellRunner, parseReleaseManifest, red
 const temporaryDirectories: string[] = []
 const thumbprint = 'A'.repeat(40)
 
-async function harness(options: { tamper?: boolean; signatureStatus?: string; signer?: string; jea?: boolean } = {}) {
+async function harness(options: { tamper?: boolean; signatureStatus?: string; signer?: string; jea?: boolean; inventoryPages?: unknown[] } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'cv-windows-collector-')); temporaryDirectories.push(directory)
   const script = Buffer.from('Get-SCVMMServer\n')
   const inventoryScript = Buffer.from('Get-SCVirtualMachine\n')
@@ -28,6 +28,7 @@ async function harness(options: { tamper?: boolean; signatureStatus?: string; si
   const executor = vi.fn(async (_file: string, args: readonly string[]) => args.includes('[string]$ExecutionContext.SessionState.LanguageMode') || args.includes('Get-CloudVerseExecutionBoundary')
     ? { stdout: options.jea ? 'NoLanguage\n' : 'ConstrainedLanguage\n', stderr: '' }
     : args.some((item) => item.includes('Get-AuthenticodeSignature')) ? { stdout: JSON.stringify({ Status: options.signatureStatus ?? 'Valid', Thumbprint: options.signer ?? thumbprint }), stderr: '' }
+    : options.inventoryPages && args.includes('-PageNumber') ? { stdout: JSON.stringify(options.inventoryPages[Number(args[args.indexOf('-PageNumber') + 1])]), stderr: '' }
     : { stdout: JSON.stringify({ schemaVersion: '1.0', requestedRole: 'ReadOnlyAdmin' }), stderr: '' })
   return { runner: new ConstrainedPowerShellRunner({ scriptsDirectory: directory, manifestPath, executor, jeaEndpointName: options.jea ? 'CloudVerseCollector' : undefined, allowedScvmmEndpoints: [{ server: 'vmm01.example.com', port: 8100 }] }), executor, directory }
 }
@@ -90,6 +91,18 @@ describe('C24 Windows collector security boundary', () => {
     const [, operation] = executor.mock.calls.at(-1)!
     expect(operation).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'AllSigned', '-ConfigurationName', 'CloudVerseCollector', '-Command', 'Invoke-CloudVerseScvmmDiscovery', '-Server', 'vmm01.example.com', '-Port', '8100'])
     expect(operation).not.toContain('-File')
+  })
+
+  it('collects SCVMM inventory in fixed source pages and validates completion metadata', async () => {
+    const empty = { hostGroups: [], clusters: [], hosts: [], templates: [], checkpoints: [], storageArrays: [], storagePools: [], logicalNetworks: [], vmNetworks: [] }
+    const contract = { schemaVersion: '1.0', capability: 'INVENTORY', platform: 'HYPERV', mutationAttempted: false }
+    const { runner, executor } = await harness({ inventoryPages: [
+      { ...contract, ...empty, virtualMachines: [{ ID: 'a' }], page: { number: 0, size: 2000, hasMore: true } },
+      { ...contract, ...empty, virtualMachines: [{ ID: 'b' }], page: { number: 1, size: 2000, hasMore: false } },
+    ] }); await runner.initialize()
+    await expect(runner.runScvmmInventory({ server: 'vmm01.example.com', port: 8100 })).resolves.toMatchObject({ virtualMachines: [{ ID: 'a' }, { ID: 'b' }] })
+    const operations = executor.mock.calls.filter(([, args]) => args.includes('-PageNumber'))
+    expect(operations).toHaveLength(2); expect(operations[0]![1]).toContain('0'); expect(operations[1]![1]).toContain('1')
   })
 
   it('rejects unsafe JEA endpoint names before process creation', async () => {

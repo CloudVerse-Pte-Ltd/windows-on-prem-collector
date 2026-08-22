@@ -75,7 +75,7 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
     try { $randomNumberGenerator.GetBytes($random) } finally { $randomNumberGenerator.Dispose() }
     $taskPassword = 'Cv1!' + [Convert]::ToBase64String($random).Replace('+','A').Replace('/','B').TrimEnd('=')
     $secureTaskPassword = ConvertTo-SecureString $taskPassword -AsPlainText -Force
-    New-LocalUser -Name $ServiceAccount -Password $secureTaskPassword -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword -Description 'CloudVerse local Hyper-V collector service identity' | Out-Null
+    New-LocalUser -Name $ServiceAccount -Password $secureTaskPassword -AccountNeverExpires -PasswordNeverExpires -UserMayNotChangePassword -Description 'CloudVerse Hyper-V collector identity' | Out-Null
     $effectiveServiceAccount = "$env:COMPUTERNAME\$ServiceAccount"
   }
   if ($configuration.executionBoundary.kind -eq 'JEA') {

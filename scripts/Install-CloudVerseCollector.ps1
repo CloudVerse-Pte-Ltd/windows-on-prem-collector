@@ -122,7 +122,7 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
   $spoolDirectory = Resolve-CloudVerseDataDirectory -Label 'spoolDirectory' -Value ([string]$configuration.spoolDirectory) -CodeDirectory $InstallDirectory
   if ($stateDirectory.Equals($spoolDirectory, [StringComparison]::OrdinalIgnoreCase)) { throw 'stateDirectory and spoolDirectory must be distinct' }
   $dataDirectories = @($stateDirectory, $spoolDirectory)
-  if ($configuration.offlineExportDirectory) { $dataDirectories += Resolve-CloudVerseDataDirectory -Label 'offlineExportDirectory' -Value ([string]$configuration.offlineExportDirectory) -CodeDirectory $InstallDirectory }
+  if (($configuration.PSObject.Properties.Name -contains 'offlineExportDirectory') -and $configuration.offlineExportDirectory) { $dataDirectories += Resolve-CloudVerseDataDirectory -Label 'offlineExportDirectory' -Value ([string]$configuration.offlineExportDirectory) -CodeDirectory $InstallDirectory }
   if (($configuration.PSObject.Properties.Name -contains 'upload') -and $configuration.upload -and ($configuration.upload.PSObject.Properties.Name -contains 'proxy') -and $configuration.upload.proxy) {
     if ([string]::IsNullOrWhiteSpace([string]$configuration.upload.proxy.authorizationFile) -or -not [IO.Path]::IsPathRooted([string]$configuration.upload.proxy.authorizationFile)) { throw 'Proxy authorizationFile must be an absolute path inside stateDirectory' }
     $proxyAuthorizationFile = [IO.Path]::GetFullPath([string]$configuration.upload.proxy.authorizationFile)
@@ -152,7 +152,8 @@ if ($PSCmdlet.ShouldProcess($InstallDirectory, 'Install CloudVerse data-center c
     Register-ScheduledTask -TaskName 'CloudVerseDataCenterCollectorValidation' -Action $validationAction -User $effectiveServiceAccount -Password $taskPassword -RunLevel Limited -Settings $settings | Out-Null
     $taskPassword = $null
   } else {
-    $principal = New-ScheduledTaskPrincipal -UserId $effectiveServiceAccount -LogonType ServiceAccount -RunLevel Limited
+    $taskLogonType = if ([string]$configuration.mode -eq 'SCVMM') { 'Password' } else { 'ServiceAccount' }
+    $principal = New-ScheduledTaskPrincipal -UserId $effectiveServiceAccount -LogonType $taskLogonType -RunLevel Limited
     Register-ScheduledTask -TaskName 'CloudVerseDataCenterCollector' -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
     Register-ScheduledTask -TaskName 'CloudVerseDataCenterCollectorValidation' -Action $validationAction -Principal $principal -Settings $settings | Out-Null
   }

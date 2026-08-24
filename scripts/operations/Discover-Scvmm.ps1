@@ -13,8 +13,15 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-Import-Module -Name VirtualMachineManager -ErrorAction Stop
+$setup = Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Microsoft System Center Virtual Machine Manager Server\Setup' -ErrorAction Stop
+$modulePath = Join-Path ([string] $setup.InstallPath) 'bin\psModules\virtualmachinemanager\virtualmachinemanager.psd1'
+Import-Module -Name $modulePath -ErrorAction Stop
 $vmmServer = Get-SCVMMServer -ComputerName $Server -TCPPort $Port -ConnectAs ReadOnlyAdmin -ErrorAction Stop
+$idProperty = $vmmServer.PSObject.Properties['ID']
+$managementPlaneId = if ($null -ne $idProperty) { [string] $idProperty.Value } else { '' }
+if ([string]::IsNullOrWhiteSpace($managementPlaneId)) {
+    $managementPlaneId = [string] $setup.VmmID
+}
 $roles = @(Get-SCUserRole -VMMServer $vmmServer -ErrorAction Stop | Select-Object -Property Name, Profile, Description)
 $hostProbe = @(Get-SCVMHost -VMMServer $vmmServer -ErrorAction Stop | Select-Object -First 1 -Property ID, Name, ComputerName, OverallState)
 
@@ -23,7 +30,7 @@ $hostProbe = @(Get-SCVMHost -VMMServer $vmmServer -ErrorAction Stop | Select-Obj
     capability = 'INVENTORY'
     platform = 'HYPERV'
     managementPlane = [pscustomobject]@{
-        id = [string] $vmmServer.ID
+        id = $managementPlaneId
         name = [string] $vmmServer.Name
         version = [string] $vmmServer.ProductVersion
         port = $Port

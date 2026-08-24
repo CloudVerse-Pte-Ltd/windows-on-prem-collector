@@ -146,7 +146,7 @@ describe('C24 Windows collector security boundary', () => {
 
   it('the operational source contains only the reviewed command names', async () => {
     const source = await readFile(new URL('../../scripts/operations/Discover-Scvmm.ps1', import.meta.url), 'utf8')
-    for (const command of ['Import-Module', 'Get-SCVMMServer', 'Get-SCUserRole', 'Get-SCVMHost', 'Select-Object', 'ConvertTo-Json']) expect(source).toContain(command)
+    for (const command of ['Import-Module', 'Join-Path', 'Get-SCVMMServer', 'Get-ItemProperty', 'Get-SCUserRole', 'Get-SCVMHost', 'Select-Object', 'ConvertTo-Json']) expect(source).toContain(command)
     expect(source).not.toMatch(/\b(?:Set|New|Remove|Start|Stop|Invoke)-(?!StrictMode)\w+/)
     expect(source).toContain("requestedRole = 'ReadOnlyAdmin'")
     expect(source).toContain('mutationAttempted = $false')
@@ -154,7 +154,7 @@ describe('C24 Windows collector security boundary', () => {
 
   it('the C25 inventory source is projection-only and covers every committed SCVMM family', async () => {
     const source = await readFile(new URL('../../scripts/operations/Collect-ScvmmInventory.ps1', import.meta.url), 'utf8')
-    for (const command of ['Get-SCVMHostGroup', 'Get-SCVMHostCluster', 'Get-SCVMHost', 'Get-SCVirtualMachine', 'Get-SCVMTemplate', 'Get-SCVMCheckpoint', 'Get-SCStorageArray', 'Get-SCStoragePool', 'Get-SCLogicalNetwork', 'Get-SCVMNetwork']) expect(source).toContain(command)
+    for (const command of ['Get-ItemProperty', 'Join-Path', 'ForEach-Object', 'Get-SCVMHostGroup', 'Get-SCVMHostCluster', 'Get-SCVMHost', 'Get-SCVirtualMachine', 'Get-SCVMTemplate', 'Get-SCVMCheckpoint', 'Get-SCStorageArray', 'Get-SCStoragePool', 'Get-SCLogicalNetwork', 'Get-SCVMNetwork']) expect(source).toContain(command)
     expect(source).not.toMatch(/\b(?:Set|New|Remove|Start|Stop|Invoke)-(?!StrictMode)\w+/)
     expect(source).toContain('mutationAttempted = $false')
   })

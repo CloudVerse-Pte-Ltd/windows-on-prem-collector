@@ -12,7 +12,7 @@ export const COMMAND_CATALOG = Object.freeze({
     script: 'Discover-Scvmm.ps1',
     jeaFunction: 'Invoke-CloudVerseScvmmDiscovery',
     allowedCommands: Object.freeze([
-      'ConvertTo-Json', 'Get-SCVMMServer', 'Get-SCUserRole', 'Get-SCVMHost', 'Import-Module', 'Select-Object', 'Set-StrictMode',
+      'ConvertTo-Json', 'Get-ItemProperty', 'Get-SCVMMServer', 'Get-SCUserRole', 'Get-SCVMHost', 'Import-Module', 'Join-Path', 'Select-Object', 'Set-StrictMode',
     ]),
     parameters: Object.freeze(['server', 'port']),
   }),
@@ -22,7 +22,7 @@ export const COMMAND_CATALOG = Object.freeze({
     allowedCommands: Object.freeze([
       'ConvertTo-Json', 'Get-SCLogicalNetwork', 'Get-SCStorageArray', 'Get-SCStoragePool', 'Get-SCVirtualMachine',
       'Get-SCVMCheckpoint', 'Get-SCVMHost', 'Get-SCVMHostCluster', 'Get-SCVMHostGroup', 'Get-SCVMNetwork',
-      'Get-SCVMTemplate', 'Get-SCVMMServer', 'Import-Module', 'Select-Object', 'Set-StrictMode', 'Sort-Object',
+      'ForEach-Object', 'Get-SCVMTemplate', 'Get-SCVMMServer', 'Get-ItemProperty', 'Import-Module', 'Join-Path', 'Select-Object', 'Set-StrictMode', 'Sort-Object',
     ]),
     parameters: Object.freeze(['server', 'port']),
   }),

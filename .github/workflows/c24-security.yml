@@ -37,6 +37,10 @@ jobs:
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-HypervPerformance.ps1 -AllowedCommand $performanceAllowed
           ./scripts/policy/Test-JeaModulePolicy.ps1 -ModulePath ./scripts/jea/CloudVerseCollector/1.0.0/CloudVerseCollector.psm1
           ./scripts/policy/Test-InstallerAclPolicy.ps1 -InstallerPath ./scripts/Install-CloudVerseCollector.ps1
+          $jeaInstaller = Get-Content ./scripts/Install-CloudVerseJea.ps1 -Raw
+          foreach ($required in @("Copy-Item -Path (Join-Path `$sourceModule '1.0.0\*') -Destination `$targetModule -Recurse", "GroupManagedServiceAccount = `$ServiceAccount.TrimEnd([char]'`$')")) {
+            if (-not $jeaInstaller.Contains($required)) { throw "JEA installer omits flat role-capability discovery or gMSA normalization: $required" }
+          }
           ./scripts/policy/Test-UpgradePolicy.ps1 -UpgradePath ./scripts/Update-CloudVerseCollector.ps1
           foreach ($script in @('./scripts/Install-CloudVerseCollector.ps1','./scripts/Install-CloudVerseJea.ps1','./scripts/Update-CloudVerseCollector.ps1')) {
             $tokens = $null; $errors = $null

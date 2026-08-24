@@ -17,7 +17,8 @@ if (Test-Path $targetModule) { throw 'CloudVerseCollector JEA module already exi
 $existingEndpoint = Get-PSSessionConfiguration -Name $EndpointName -ErrorAction SilentlyContinue
 if ($existingEndpoint) { throw 'Requested JEA endpoint already exists; use the signed upgrade procedure' }
 New-Item -ItemType Directory -Path (Split-Path $targetModule -Parent) -Force | Out-Null
-Copy-Item -LiteralPath $sourceModule -Destination $targetModule -Recurse
+New-Item -ItemType Directory -Path $targetModule | Out-Null
+Copy-Item -Path (Join-Path $sourceModule '1.0.0\*') -Destination $targetModule -Recurse
 $transcripts = Join-Path $env:ProgramData 'CloudVerse\Transcripts'
 New-Item -ItemType Directory -Path $transcripts -Force | Out-Null
 $acl = Get-Acl $transcripts
@@ -38,7 +39,7 @@ try {
   }
   if ($CollectorMode -eq 'SCVMM') {
     if ($ServiceAccount -notmatch '^[^\\]+\\[^\\]+\$$') { throw 'SCVMM JEA requires a domain gMSA service account ending in $' }
-    $sessionParameters.GroupManagedServiceAccount = $ServiceAccount
+    $sessionParameters.GroupManagedServiceAccount = $ServiceAccount.TrimEnd([char]'$')
   } else {
     $sessionParameters.RunAsVirtualAccount = $true
   }

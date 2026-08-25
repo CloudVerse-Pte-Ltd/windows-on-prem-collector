@@ -172,6 +172,8 @@ describe('C24 Windows collector security boundary', () => {
     const source = await readFile(new URL('../../scripts/operations/Collect-ScvmmInventory.ps1', import.meta.url), 'utf8')
     for (const command of ['Get-ItemProperty', 'Join-Path', 'ForEach-Object', 'Get-SCVMHostGroup', 'Get-SCVMHostCluster', 'Get-SCVMHost', 'Get-SCVirtualMachine', 'Get-SCVMTemplate', 'Get-SCVMCheckpoint', 'Get-SCStorageArray', 'Get-SCStoragePool', 'Get-SCLogicalNetwork', 'Get-SCVMNetwork']) expect(source).toContain(command)
     expect(source).not.toMatch(/\b(?:Set|New|Remove|Start|Stop|Invoke)-(?!StrictMode)\w+/)
+    expect(source).not.toContain('Select-Object -Skip')
+    expect(source).toContain('[Math]::Min($allVirtualMachines.Count, $skip + $PageSize + 1)')
     expect(source).toContain('mutationAttempted = $false')
   })
 

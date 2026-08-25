@@ -27,7 +27,9 @@ $allVirtualMachines = @(Get-SCVirtualMachine -VMMServer $vmm | ForEach-Object {
         CPUCount = $_.CPUCount; Memory = $_.Memory; DynamicMemoryEnabled = $_.DynamicMemoryEnabled; TotalSize = $_.TotalSize; CreationTime = [string] $_.CreationTime
     }
 } | Sort-Object ID)
-$vmPage = @($allVirtualMachines | Select-Object -Skip $skip -First ($PageSize + 1))
+$vmPage = @()
+$pageLimit = [Math]::Min($allVirtualMachines.Count, $skip + $PageSize + 1)
+for ($index = $skip; $index -lt $pageLimit; $index++) { $vmPage += $allVirtualMachines[$index] }
 $hasMoreVirtualMachines = $vmPage.Count -gt $PageSize
 if ($hasMoreVirtualMachines) { $vmPage = @($vmPage[0..($PageSize - 1)]) }
 $hostGroups = @(); $clusters = @(); $hosts = @(); $templates = @(); $checkpoints = @(); $storageArrays = @(); $storagePools = @(); $logicalNetworks = @(); $vmNetworks = @()

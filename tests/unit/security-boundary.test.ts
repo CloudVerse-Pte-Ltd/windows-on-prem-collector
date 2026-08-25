@@ -219,6 +219,8 @@ describe('C24 Windows collector security boundary', () => {
     expect(source).toContain("[regex]::Escape([string]$vm.Id)")
     expect(source).toContain('$counterSet.PathsWithInstances')
     expect(source).toContain('$sample.InstanceName.IndexOf($diskName, [StringComparison]::OrdinalIgnoreCase)')
+    expect(source).toContain('$matchingVms += $vm')
+    expect(source).not.toMatch(/\$matches\s*[+=]/i)
     expect(source).toContain("stage = 'COUNTER_IDENTITY_MAPPING'")
     expect(source).toContain('exceptionType = $_.Exception.GetType().FullName')
     expect(source).toContain("Scale = 1MB")

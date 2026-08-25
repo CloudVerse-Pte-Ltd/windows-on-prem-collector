@@ -24,16 +24,16 @@ foreach ($definition in $definitions) {
         $stage = 'COUNTER_IDENTITY_MAPPING'
         foreach ($sample in $counter.CounterSamples) {
             if ($sample.InstanceName -eq '_total') { continue }
-            $matches = @()
+            $matchingVms = @()
             foreach ($vm in $vms) {
                 $diskMatch = $false; foreach ($diskName in @($vm.DiskNames)) { if ($diskName -and $sample.InstanceName.IndexOf($diskName, [StringComparison]::OrdinalIgnoreCase) -ge 0) { $diskMatch = $true } }
-                if ($sample.InstanceName -eq $vm.Name -or $sample.InstanceName -like "$($vm.Name):*" -or $sample.InstanceName -match [regex]::Escape([string]$vm.Id) -or $diskMatch) { $matches += $vm }
+                if ($sample.InstanceName -eq $vm.Name -or $sample.InstanceName -like "$($vm.Name):*" -or $sample.InstanceName -match [regex]::Escape([string]$vm.Id) -or $diskMatch) { $matchingVms += $vm }
             }
-            if ($matches.Count -ne 1) {
-                $gaps += [pscustomobject]@{ code = 'COUNTER_INSTANCE_VM_GUID_UNRESOLVED'; metricKey = $definition.Key; details = @{ instanceName = $sample.InstanceName; matchCount = $matches.Count } }
+            if ($matchingVms.Count -ne 1) {
+                $gaps += [pscustomobject]@{ code = 'COUNTER_INSTANCE_VM_GUID_UNRESOLVED'; metricKey = $definition.Key; details = @{ instanceName = $sample.InstanceName; matchCount = $matchingVms.Count } }
                 continue
             }
-            $rows += [pscustomobject]@{ vmUid = [string]$matches[0].Id; vmName = [string]$matches[0].Name; metricKey = $definition.Key; timestamp = $sample.Timestamp.ToUniversalTime().ToString('o'); value = [double]$sample.CookedValue * [double]$definition.Scale; instanceName = [string]$sample.InstanceName; counterPath = [string]$sample.Path }
+            $rows += [pscustomobject]@{ vmUid = [string]$matchingVms[0].Id; vmName = [string]$matchingVms[0].Name; metricKey = $definition.Key; timestamp = $sample.Timestamp.ToUniversalTime().ToString('o'); value = [double]$sample.CookedValue * [double]$definition.Scale; instanceName = [string]$sample.InstanceName; counterPath = [string]$sample.Path }
         }
     } catch {
         $gaps += [pscustomobject]@{ code = 'COUNTER_UNAVAILABLE'; metricKey = $definition.Key; details = @{ errorType = 'COUNTER_READ_FAILED'; stage = $stage; exceptionType = $_.Exception.GetType().FullName; hResult = $_.Exception.HResult } }

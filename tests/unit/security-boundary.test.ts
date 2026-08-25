@@ -204,6 +204,8 @@ describe('C24 Windows collector security boundary', () => {
     expect(installer).toContain('New-PSSessionConfigurationFile @sessionParameters | Out-Null')
     expect(installer).toContain('Register-PSSessionConfiguration -Name $EndpointName -Path $configuration -Force -NoServiceRestart | Out-Null')
     expect(upgrade.match(/Install-CloudVerseJea\.ps1[^\n]+\| Out-Null/g)).toHaveLength(2)
+    expect(upgrade).toContain("$serviceAccount = $serviceAccount.TrimEnd([char]'$') + '$'")
+    expect(upgrade.match(/-ServiceAccount \$serviceAccount/g)).toHaveLength(2)
   })
 
   it('the C32 source uses only local read-only counters and emits explicit mapping gaps', async () => {

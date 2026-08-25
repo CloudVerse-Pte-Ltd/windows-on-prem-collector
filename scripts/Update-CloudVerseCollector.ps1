@@ -31,6 +31,11 @@ $backup = Join-Path $parent "DataCenterCollector.rollback.$upgradeId"
 $jeaModuleRoot = Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules\CloudVerseCollector'
 $jeaBackup = Join-Path $parent "CloudVerseCollector.JEA.rollback.$upgradeId"
 $endpointName = if ($configuration.executionBoundary.kind -eq 'JEA') { [string]$configuration.executionBoundary.endpointName } else { $null }
+$serviceAccount = [string]$task.Principal.UserId
+if ([string]$configuration.mode -eq 'SCVMM') {
+  if ($serviceAccount -notmatch '^[^\\]+\\[^\\$]+\$?$') { throw 'Installed SCVMM task identity is not a domain gMSA' }
+  $serviceAccount = $serviceAccount.TrimEnd([char]'$') + '$'
+}
 $oldAcl = Get-Acl $install
 $taskStopped = $false; $treeSwapped = $false
 
@@ -63,7 +68,7 @@ try {
   Move-Item -LiteralPath $install -Destination $backup
   Move-Item -LiteralPath $staging -Destination $install; $treeSwapped = $true
   Set-Acl -Path $install -AclObject $oldAcl
-  if ($endpointName) { & (Join-Path $install 'scripts\Install-CloudVerseJea.ps1') -InstallDirectory $install -ServiceAccount ([string]$task.Principal.UserId) -EndpointName $endpointName -CollectorMode ([string]$configuration.mode) | Out-Null }
+  if ($endpointName) { & (Join-Path $install 'scripts\Install-CloudVerseJea.ps1') -InstallDirectory $install -ServiceAccount $serviceAccount -EndpointName $endpointName -CollectorMode ([string]$configuration.mode) | Out-Null }
   Start-ScheduledTask -TaskName $ValidationTaskName -ErrorAction Stop
   $deadline = [DateTime]::UtcNow.AddMinutes(2)
   do { Start-Sleep -Seconds 1; $validationTask = Get-ScheduledTask -TaskName $ValidationTaskName -ErrorAction Stop } while ($validationTask.State -eq 'Running' -and [DateTime]::UtcNow -lt $deadline)
@@ -79,7 +84,7 @@ try {
   if ($endpointName) {
     if (Get-PSSessionConfiguration -Name $endpointName -ErrorAction SilentlyContinue) { Unregister-PSSessionConfiguration -Name $endpointName -Force -ErrorAction SilentlyContinue }
     if (Test-Path $jeaModuleRoot -PathType Container) { Remove-Item -LiteralPath $jeaModuleRoot -Recurse -Force }
-    if (Test-Path (Join-Path $install 'scripts\Install-CloudVerseJea.ps1') -PathType Leaf) { & (Join-Path $install 'scripts\Install-CloudVerseJea.ps1') -InstallDirectory $install -ServiceAccount ([string]$task.Principal.UserId) -EndpointName $endpointName -CollectorMode ([string]$configuration.mode) | Out-Null }
+    if (Test-Path (Join-Path $install 'scripts\Install-CloudVerseJea.ps1') -PathType Leaf) { & (Join-Path $install 'scripts\Install-CloudVerseJea.ps1') -InstallDirectory $install -ServiceAccount $serviceAccount -EndpointName $endpointName -CollectorMode ([string]$configuration.mode) | Out-Null }
   }
   if ($taskStopped) { Start-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue }
   throw $upgradeError

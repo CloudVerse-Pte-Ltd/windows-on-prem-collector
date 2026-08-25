@@ -1,5 +1,8 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$WarningPreference = 'SilentlyContinue'
+$ProgressPreference = 'SilentlyContinue'
+$InformationPreference = 'SilentlyContinue'
 $operations = Join-Path $env:ProgramFiles 'CloudVerse\DataCenterCollector\scripts\operations'
 
 function Get-CloudVerseExecutionBoundary {
@@ -20,15 +23,15 @@ function Invoke-CloudVerseScvmmInventory {
 function Invoke-CloudVerseHypervInventory {
   [CmdletBinding()]
   param()
-  Import-Module CimCmdlets -ErrorAction Stop
-  Import-Module FailoverClusters -ErrorAction Stop
+  Import-Module CimCmdlets -ErrorAction Stop -DisableNameChecking
+  Import-Module FailoverClusters -ErrorAction Stop -DisableNameChecking
   & (Join-Path $operations 'Collect-HypervCimInventory.ps1')
 }
 function Invoke-CloudVerseHypervPerformance {
   [CmdletBinding()]
   param()
-  Import-Module Hyper-V -ErrorAction Stop
-  Import-Module Microsoft.PowerShell.Diagnostics -ErrorAction Stop
+  Import-Module Hyper-V -ErrorAction Stop -DisableNameChecking
+  Import-Module Microsoft.PowerShell.Diagnostics -ErrorAction Stop -DisableNameChecking
   & (Join-Path $operations 'Collect-HypervPerformance.ps1')
 }
 Export-ModuleMember -Function Get-CloudVerseExecutionBoundary,Invoke-CloudVerseScvmmDiscovery,Invoke-CloudVerseScvmmInventory,Invoke-CloudVerseHypervInventory,Invoke-CloudVerseHypervPerformance

@@ -33,7 +33,7 @@ jobs:
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-ScvmmInventory.ps1 -AllowedCommand $inventoryAllowed
           $cimAllowed = @('ConvertTo-Json','Copy-CloudVerseProperties','Get-CimInstance','Get-Cluster','Set-StrictMode')
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-HypervCimInventory.ps1 -AllowedCommand $cimAllowed
-          $performanceAllowed = @('ConvertTo-Json','Get-Counter','Get-VM','Set-StrictMode')
+          $performanceAllowed = @('ConvertTo-Json','Get-Counter','Get-VM','Get-VMHardDiskDrive','Set-StrictMode')
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-HypervPerformance.ps1 -AllowedCommand $performanceAllowed
           ./scripts/policy/Test-JeaModulePolicy.ps1 -ModulePath ./scripts/jea/CloudVerseCollector/1.0.0/CloudVerseCollector.psm1
           ./scripts/policy/Test-InstallerAclPolicy.ps1 -InstallerPath ./scripts/Install-CloudVerseCollector.ps1

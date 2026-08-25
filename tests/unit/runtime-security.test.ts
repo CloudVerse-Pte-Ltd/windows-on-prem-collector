@@ -115,6 +115,28 @@ describe('Windows collector runtime security', () => {
     expect(await spool.usage()).toMatchObject({ items: 0 }); expect(await uploader.health()).toMatchObject({ healthy: true, lastError: null })
   })
 
+  it('creates a CPD collection run through the fixed authenticated route before direct push', async () => {
+    const requests: Array<{ url: string; body: any; headers: any }> = []
+    const sender = vi.fn(async (url: any, init: any) => {
+      requests.push({ url: String(url), body: JSON.parse(init.body), headers: init.headers })
+      return new Response(JSON.stringify({ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', managementPlaneUid: 'scvmm:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }), { status: 201, headers: { 'content-type': 'application/json' } })
+    }) as any
+    const uploader = new WindowsSpoolUploader({} as any, { endpoint: 'https://test.cloudverse.ai/api-gw/data-center-collector/bundles/push', allowedHosts: ['test.cloudverse.ai'], bearerToken: 'transport-secret' }, async () => ['8.8.8.8'], sender)
+    const input = { orgId: 3, integrationId: 3007, collectorId: 'dc-test', signatureKeyId: 'key-test', managementPlaneUid: 'scvmm:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', adapterName: 'cloudverse-windows-collector', adapterVersion: '0.1.0', scaleClass: 'S' as const }
+    await expect(uploader.startRun(input)).resolves.toBe('cccccccc-cccc-4ccc-8ccc-cccccccccccc')
+    expect(requests).toEqual([{ url: 'https://test.cloudverse.ai/api-gw/data-center-collector/runs/start', body: input, headers: { 'content-type': 'application/json', authorization: 'Bearer transport-secret' } }])
+  })
+
+  it('fails closed on noncanonical, private, or scope-mismatched collector run assignments', async () => {
+    const input = { orgId: 3, integrationId: 3007, collectorId: 'dc-test', signatureKeyId: 'key-test', managementPlaneUid: 'scvmm:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', adapterName: 'cloudverse-windows-collector', adapterVersion: '0.1.0', scaleClass: 'S' as const }
+    const noncanonical = new WindowsSpoolUploader({} as any, { endpoint: 'https://test.cloudverse.ai/arbitrary', allowedHosts: ['test.cloudverse.ai'], bearerToken: 'token' }, async () => ['8.8.8.8'], vi.fn() as any)
+    await expect(noncanonical.startRun(input)).rejects.toThrow('fixed collector run endpoint')
+    const privateTarget = new WindowsSpoolUploader({} as any, { endpoint: 'https://test.cloudverse.ai/data-center-collector/bundles/push', allowedHosts: ['test.cloudverse.ai'], bearerToken: 'token' }, async () => ['10.0.0.8'], vi.fn() as any)
+    await expect(privateTarget.startRun(input)).rejects.toThrow('prohibited address')
+    const mismatch = new WindowsSpoolUploader({} as any, { endpoint: 'https://test.cloudverse.ai/data-center-collector/bundles/push', allowedHosts: ['test.cloudverse.ai'], bearerToken: 'token' }, async () => ['8.8.8.8'], vi.fn(async () => new Response(JSON.stringify({ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', managementPlaneUid: 'scvmm:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }), { status: 201, headers: { 'content-type': 'application/json' } })) as any)
+    await expect(mismatch.startRun(input)).rejects.toThrow('assignment response is invalid')
+  })
+
   it('delivers N-1 queued bytes unchanged and preserves older incompatible schemas for rollback', async () => {
     expect(WINDOWS_ACCEPTED_BUNDLE_SCHEMAS).toEqual(['1.0', '0.9'])
     const directory = await mkdtemp(join(tmpdir(), 'cv-win-upgrade-')); const spool = new EncryptedWindowsSpool({ directory, key: Buffer.alloc(32, 6), maxBytes: 1_000_000, maxItems: 10, acceptedSchemaVersions: [...WINDOWS_ACCEPTED_BUNDLE_SCHEMAS] })

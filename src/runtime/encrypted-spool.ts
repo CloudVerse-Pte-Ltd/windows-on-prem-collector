@@ -10,6 +10,7 @@ interface Item { queueId: string; bundleId: string; schemaVersion: string; creat
 type Resolver = (hostname: string) => Promise<string[]>
 type Sender = typeof undiciFetch
 export interface WindowsProxyConfig { endpoint: string; allowedHosts: string[]; privateAddressAllowedHosts?: string[]; authorization: string }
+export interface WindowsCollectorRunInput { orgId: number; integrationId: number; collectorId: string; signatureKeyId: string; managementPlaneUid: string; adapterName: string; adapterVersion: string; scaleClass: 'S' | 'M' | 'L' | 'XL' }
 export const WINDOWS_ACCEPTED_BUNDLE_SCHEMAS = Object.freeze(['1.0', '0.9'] as const)
 const privateAddress = (address: string): boolean => {
   const value = address.toLowerCase()
@@ -45,6 +46,30 @@ export class EncryptedWindowsSpool {
 export class WindowsSpoolUploader {
   private lastError: string | null = null; private lastSuccessAt: string | null = null
   constructor(private readonly spool: EncryptedWindowsSpool, private readonly config: { endpoint: string; allowedHosts: string[]; privateAddressAllowedHosts?: string[]; bearerToken: string; proxy?: WindowsProxyConfig }, private readonly resolver: Resolver = defaultResolver, private readonly sender: Sender = undiciFetch) {}
+  async startRun(input: WindowsCollectorRunInput) {
+    const url = new URL(this.config.endpoint)
+    if (!url.pathname.endsWith('/bundles/push')) throw new Error('Upload endpoint cannot derive the fixed collector run endpoint')
+    url.pathname = `${url.pathname.slice(0, -'/bundles/push'.length)}/runs/start`
+    if (url.protocol !== 'https:' || url.username || url.password || !this.config.allowedHosts.map((x) => x.toLowerCase()).includes(url.hostname.toLowerCase())) throw new Error('Collector run endpoint is not approved credential-free HTTPS')
+    const addresses = await this.resolver(url.hostname)
+    if (!addresses.length || (addresses.some(privateAddress) && !(this.config.privateAddressAllowedHosts ?? []).map((x) => x.toLowerCase()).includes(url.hostname.toLowerCase()))) throw new Error('Collector run endpoint resolved to a prohibited address')
+    let agent: Dispatcher
+    if (this.config.proxy) {
+      const proxyUrl = new URL(this.config.proxy.endpoint)
+      if (proxyUrl.protocol !== 'https:' || proxyUrl.username || proxyUrl.password || !this.config.proxy.allowedHosts.map((x) => x.toLowerCase()).includes(proxyUrl.hostname.toLowerCase())) throw new Error('Proxy endpoint is not approved credential-free HTTPS')
+      if (!/^(Basic|Bearer) [A-Za-z0-9+/_=.~-]+$/.test(this.config.proxy.authorization)) throw new Error('Proxy authorization value is invalid')
+      const proxyAddresses = await this.resolver(proxyUrl.hostname)
+      if (!proxyAddresses.length || (proxyAddresses.some(privateAddress) && !(this.config.proxy.privateAddressAllowedHosts ?? []).map((x) => x.toLowerCase()).includes(proxyUrl.hostname.toLowerCase()))) throw new Error('Proxy endpoint resolved to a prohibited address')
+      agent = new ProxyAgent({ uri: proxyUrl.toString(), token: this.config.proxy.authorization, clientFactory: (origin, options) => new Pool(origin, { ...options, connect: { ...((options as any).connect ?? {}), lookup: lookupPinned(proxyAddresses) } }) })
+    } else agent = new Agent({ connect: { lookup: lookupPinned(addresses) } })
+    try {
+      const response = await this.sender(url, { method: 'POST', dispatcher: agent, headers: { 'content-type': 'application/json', authorization: `Bearer ${this.config.bearerToken}` }, body: JSON.stringify(input) })
+      if (!response.ok) throw new Error(`Collector run creation returned HTTP ${response.status}`)
+      const value = await response.json() as { id?: unknown; managementPlaneUid?: unknown }
+      if (typeof value.id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.id) || value.managementPlaneUid !== input.managementPlaneUid) throw new Error('Collector run assignment response is invalid')
+      return value.id
+    } finally { await agent.close() }
+  }
   async flushOnce(now = new Date()) {
     const items = await this.spool.list(); let sent = 0; let deferred = 0; let incompatible = 0
     let url: URL; let addresses: string[]

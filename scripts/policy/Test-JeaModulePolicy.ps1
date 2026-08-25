@@ -16,8 +16,12 @@ $expectedFunctions = @(
 $functions = @($ast.FindAll({param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst]}, $true) | ForEach-Object Name | Sort-Object)
 if (($functions -join ',') -ne ($expectedFunctions -join ',')) { throw "JEA function surface differs from the immutable catalog: $($functions -join ',')" }
 $namedCommands = @($ast.FindAll({param($node) $node -is [System.Management.Automation.Language.CommandAst]}, $true) | ForEach-Object {$_.GetCommandName()} | Where-Object {$_} | Sort-Object -Unique)
-$allowedCommands = @('Export-ModuleMember','Join-Path','Set-StrictMode')
+$allowedCommands = @('Export-ModuleMember','Import-Module','Join-Path','Set-StrictMode')
 foreach ($command in $namedCommands) { if ($allowedCommands -notcontains $command) { throw "JEA module command is not allowlisted: $command" } }
+$source = Get-Content -LiteralPath $ModulePath -Raw
+foreach ($requiredImport in @('Import-Module CimCmdlets -ErrorAction Stop','Import-Module Hyper-V -ErrorAction Stop','Import-Module Microsoft.PowerShell.Diagnostics -ErrorAction Stop')) {
+  if (-not $source.Contains($requiredImport)) { throw "JEA module omits fixed host read-only module import: $requiredImport" }
+}
 $dynamicCommands = @($ast.FindAll({param($node) $node -is [System.Management.Automation.Language.CommandAst] -and -not $node.GetCommandName()}, $true))
 $expectedOperations = @(
   "& (Join-Path `$operations 'Collect-HypervCimInventory.ps1')",

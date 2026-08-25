@@ -20,11 +20,14 @@ function Invoke-CloudVerseScvmmInventory {
 function Invoke-CloudVerseHypervInventory {
   [CmdletBinding()]
   param()
+  Import-Module CimCmdlets -ErrorAction Stop
   & (Join-Path $operations 'Collect-HypervCimInventory.ps1')
 }
 function Invoke-CloudVerseHypervPerformance {
   [CmdletBinding()]
   param()
+  Import-Module Hyper-V -ErrorAction Stop
+  Import-Module Microsoft.PowerShell.Diagnostics -ErrorAction Stop
   & (Join-Path $operations 'Collect-HypervPerformance.ps1')
 }
 Export-ModuleMember -Function Get-CloudVerseExecutionBoundary,Invoke-CloudVerseScvmmDiscovery,Invoke-CloudVerseScvmmInventory,Invoke-CloudVerseHypervInventory,Invoke-CloudVerseHypervPerformance

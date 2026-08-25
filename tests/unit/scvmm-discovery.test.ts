@@ -7,7 +7,7 @@ const raw = {
   schemaVersion: '1.0', capability: 'INVENTORY', platform: 'HYPERV', requestedRole: 'ReadOnlyAdmin', mutationAttempted: false,
   managementPlane: { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', name: 'VMM01', version: '2025.1', port: 8100 },
   visibleRoles: [{ Name: 'CloudVerse Read Only', Profile: 'ReadOnlyAdmin' }],
-  hostReadProbe: [{ ID: 'host-guid', Name: 'HV01', ComputerName: 'hv01.example.com', OverallState: 'OK' }],
+  hostReadProbe: [{ ID: 'bbbbbbbb-bbbb-0bbb-0bbb-bbbbbbbbbbbb', Name: 'HV01', ComputerName: 'hv01.example.com', OverallState: 'OK' }],
 }
 
 describe('SCVMM discovery normalization', () => {
@@ -33,6 +33,8 @@ describe('SCVMM discovery normalization', () => {
     expect(() => normalizeScvmmDiscoveryOutput({ ...raw, mutationAttempted: true }, parameters, context)).toThrow('contract')
     expect(() => normalizeScvmmDiscoveryOutput({ ...raw, managementPlane: { ...raw.managementPlane, port: 9999 } }, parameters, context)).toThrow('approved endpoint')
     expect(() => normalizeScvmmDiscoveryOutput({ ...raw, managementPlane: { ...raw.managementPlane, id: '' } }, parameters, context)).toThrow('managementPlane.id')
+    expect(() => normalizeScvmmDiscoveryOutput({ ...raw, hostReadProbe: [{ ...raw.hostReadProbe[0], ID: 'host-name' }] }, parameters, context)).toThrow('immutable GUID')
+    expect(() => normalizeScvmmDiscoveryOutput(raw, parameters, { ...context, collectionRunId: '00000000-0000-0000-0000-000000000000' })).toThrow('context')
     expect(() => normalizeScvmmDiscoveryOutput({ ...raw, hostReadProbe: [raw.hostReadProbe[0], raw.hostReadProbe[0]] }, parameters, context)).toThrow('hostReadProbe')
   })
 

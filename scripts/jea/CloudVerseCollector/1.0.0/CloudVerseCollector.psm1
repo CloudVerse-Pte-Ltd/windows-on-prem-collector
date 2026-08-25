@@ -21,6 +21,7 @@ function Invoke-CloudVerseHypervInventory {
   [CmdletBinding()]
   param()
   Import-Module CimCmdlets -ErrorAction Stop
+  Import-Module FailoverClusters -ErrorAction Stop
   & (Join-Path $operations 'Collect-HypervCimInventory.ps1')
 }
 function Invoke-CloudVerseHypervPerformance {

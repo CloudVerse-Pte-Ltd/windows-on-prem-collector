@@ -21,7 +21,9 @@ $cluster = $null
 $clusterNodes = @()
 $clusterAvailable = $true
 try {
-    $cluster = Copy-CloudVerseProperties @(Get-CimInstance -Namespace root/MSCluster -ClassName MSCluster_Cluster -ErrorAction Stop)[0] @('Id','Name','Description')
+    # MSCluster_Cluster.Id is null on supported Windows Server failover clusters.
+    # Get-Cluster exposes the durable cluster GUID backed by the cluster service.
+    $cluster = Copy-CloudVerseProperties @(Get-Cluster -ErrorAction Stop)[0] @('Id','Name','Description')
     foreach ($item in @(Get-CimInstance -Namespace root/MSCluster -ClassName MSCluster_Node -ErrorAction Stop)) { $clusterNodes += Copy-CloudVerseProperties $item @('Id','Name','State') }
 } catch { $clusterAvailable = $false }
 [pscustomobject]@{

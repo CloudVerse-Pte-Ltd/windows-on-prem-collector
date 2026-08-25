@@ -41,7 +41,9 @@ const SCVMM_CAPABILITIES: ReadonlyArray<ScvmmDiscoveryResult['capabilities'][num
   'DISCOVER_INVENTORY',
 ]
 
+const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const ZERO_GUID = /^0{8}-0{4}-0{4}-0{4}-0{12}$/i
 
 const boundedString = (value: unknown, field: string, maximum = 1024) => {
   if (typeof value !== 'string' || !value.trim() || value.length > maximum) throw new Error(`SCVMM output ${field} is invalid`)
@@ -62,7 +64,7 @@ export function normalizeScvmmDiscoveryOutput(raw: unknown, parameters: ScvmmDis
   const name = boundedString(plane.name, 'managementPlane.name', 253)
   const version = boundedString(plane.version, 'managementPlane.version', 128)
   const managementPlaneId = boundedString(plane.id, 'managementPlane.id', 128).toLowerCase()
-  if (!UUID_PATTERN.test(managementPlaneId) || /^0{8}-0{4}-0{4}-0{4}-0{12}$/i.test(managementPlaneId)) throw new Error('SCVMM management plane lacks an immutable UUID')
+  if (!GUID_PATTERN.test(managementPlaneId) || ZERO_GUID.test(managementPlaneId)) throw new Error('SCVMM management plane lacks an immutable UUID')
   const visibleRoles = boundedArray(value.visibleRoles, 'visibleRoles', 100).map((item) => {
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('SCVMM output visible role is invalid')
     const role = item as Record<string, unknown>
@@ -72,7 +74,7 @@ export function normalizeScvmmDiscoveryOutput(raw: unknown, parameters: ScvmmDis
     if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('SCVMM output host probe is invalid')
     const host = item as Record<string, unknown>
     return {
-      id: boundedString(host.ID ?? host.id, 'host.id', 128), name: boundedString(host.Name ?? host.name, 'host.name', 253),
+      id: (() => { const id = boundedString(host.ID ?? host.id, 'host.id', 128).toLowerCase(); if (!GUID_PATTERN.test(id) || ZERO_GUID.test(id)) throw new Error('SCVMM output host.id lacks an immutable GUID'); return id })(), name: boundedString(host.Name ?? host.name, 'host.name', 253),
       computerName: boundedString(host.ComputerName ?? host.computerName, 'host.computerName', 253), overallState: boundedString(host.OverallState ?? host.overallState, 'host.overallState', 128),
     }
   })

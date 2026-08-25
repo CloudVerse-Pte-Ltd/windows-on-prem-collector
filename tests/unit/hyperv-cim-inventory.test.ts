@@ -22,6 +22,13 @@ describe('C26 local Hyper-V CIM v2 fallback', () => {
     expect(result.capabilities.FAILOVER_CLUSTER).toBe('READY')
   })
 
+  it('accepts Windows GUIDs that are not RFC UUIDs and rejects the null GUID', () => {
+    const windowsGuid = 'bde200ac-0820-0078-1e2a-8536b219f72a'
+    const result = normalizeHypervCimInventory({ ...base, processors: [], memory: [], computerSystems: [], settings: [], clusterAvailable: true, cluster: { Id: windowsGuid, Name: 'cluster-a' }, clusterNodes: [] }, context)
+    expect(result.records.at(-1)?.sourceUid).toBe(windowsGuid)
+    expect(() => normalizeHypervCimInventory({ ...base, processors: [], memory: [], computerSystems: [], settings: [], clusterAvailable: true, cluster: { Id: '00000000-0000-0000-0000-000000000000', Name: 'cluster-a' }, clusterNodes: [] }, context)).toThrow('immutable UUID')
+  })
+
   it('preserves VM identity across rename and rejects malformed identity or hidden coverage', () => {
     const source = (name: string) => ({ ...base, computerSystems: [{ Name: uuid(2), ElementName: name }], settings: [], clusterAvailable: false, clusterNodes: [] })
     expect(normalizeHypervCimInventory(source('old'), context).records[1].sourceUid).toBe(normalizeHypervCimInventory(source('new'), context).records[1].sourceUid)

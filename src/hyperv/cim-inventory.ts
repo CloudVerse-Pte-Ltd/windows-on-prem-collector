@@ -13,12 +13,13 @@ export interface HypervCimInventoryResult {
   provenance: { connectorId: 'cloudverse.hyperv.cim-v2'; connectorVersion: string; collectionRunId: string; collectedAt: string; transport: 'LOCAL_CIM_V2' }
 }
 
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const MAX_ITEMS = 100_000
 const requiredUnavailable = ['SCVMM_HOST_GROUP', 'SCVMM_TEMPLATE', 'SCVMM_STORAGE_FABRIC', 'SCVMM_NETWORK_INTENT']
 const normalizeUuid = (value: unknown, field: string) => {
   const candidate = String(value ?? '').trim()
-  if (!UUID.test(candidate) || /^0{8}-0{4}-0{4}-0{4}-0{12}$/i.test(candidate)) throw new Error(`Hyper-V CIM ${field} lacks an immutable UUID`)
+  if (!GUID.test(candidate) || /^0{8}-0{4}-0{4}-0{4}-0{12}$/i.test(candidate)) throw new Error(`Hyper-V CIM ${field} lacks an immutable UUID`)
   return candidate.toLowerCase()
 }
 const string = (value: unknown, field: string, max = 2048) => {
@@ -35,7 +36,7 @@ const scalars = (record: Record<string, unknown>, omitted: Set<string>) => Objec
 })) as HypervCimAsset['attributes']
 const uuidFromInstanceId = (value: unknown, field: string) => {
   const candidate = string(value, field, 2048)
-  const match = candidate.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i)
+  const match = candidate.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
   return match ? match[0]!.toLowerCase() : null
 }
 const keyedSettings = (value: unknown, field: string, allowedVmUids: Set<string>) => {
@@ -65,11 +66,11 @@ export function normalizeHypervCimInventory(raw: unknown, context: ScvmmDiscover
   const records: HypervCimAsset[] = [{ kind: 'HOST', sourceUid: hostUid, name: string(host.Name, 'host.Name', 253), attributes: scalars(host, new Set(['UUID', 'Name'])), relationships: {} }]
   const seen = new Set([`HOST:${hostUid}`])
   const systems = rows(root.computerSystems ?? [], 'computerSystems')
-  const vmUids = new Set(systems.map((system) => String(system.Name ?? '').toLowerCase()).filter((uid) => UUID.test(uid)))
+  const vmUids = new Set(systems.map((system) => String(system.Name ?? '').toLowerCase()).filter((uid) => GUID.test(uid)))
   const processors = keyedSettings(root.processors, 'processors', vmUids); const memory = keyedSettings(root.memory, 'memory', vmUids)
   for (const system of systems) {
     const rawId = String(system.Name ?? '')
-    if (!UUID.test(rawId)) continue // the local hosting-computer object is not a VM
+    if (!GUID.test(rawId)) continue // the local hosting-computer object is not a VM
     const sourceUid = normalizeUuid(rawId, 'computerSystems.Name'); const key = `VIRTUAL_MACHINE:${sourceUid}`
     if (seen.has(key)) throw new Error(`Hyper-V CIM contains duplicate immutable identity ${key}`); seen.add(key)
     const processor = processors.get(sourceUid); const memorySetting = memory.get(sourceUid)

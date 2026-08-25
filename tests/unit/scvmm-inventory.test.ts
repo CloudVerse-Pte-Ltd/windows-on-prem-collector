@@ -28,6 +28,13 @@ describe('C25 SCVMM inventory normalization', () => {
     expect(() => normalizeScvmmInventoryOutput({ ...base, hosts: [{ ID: id(1), Name: 'a' }, { ID: id(1), Name: 'renamed' }] }, { server: 'vmm01', port: 8100 }, context)).toThrow('duplicate')
     expect(() => normalizeScvmmInventoryOutput({ ...base, mutationAttempted: true }, { server: 'vmm01', port: 8100 }, context)).toThrow('signed contract')
     expect(() => normalizeScvmmInventoryOutput({ ...base, hosts: Array.from({ length: 100_001 }, (_, n) => ({ ID: id(n), Name: 'x' })) }, { server: 'vmm01', port: 8100 }, context)).toThrow('scale bound')
+    expect(() => normalizeScvmmInventoryOutput({ ...base, hosts: [{ ID: '00000000-0000-0000-0000-000000000000', Name: 'null' }] }, { server: 'vmm01', port: 8100 }, context)).toThrow('immutable GUID')
+  })
+
+  it('accepts non-RFC Windows GUIDs as provider-native immutable identities', () => {
+    const windowsGuid = 'bde200ac-0820-0078-1e2a-8536b219f72a'
+    const result = normalizeScvmmInventoryOutput({ ...base, hosts: [{ ID: windowsGuid, Name: 'host-a' }] }, { server: 'vmm01', port: 8100 }, context)
+    expect(result.records[0]?.sourceUid).toBe(windowsGuid)
   })
 
   it('normalizes and signs the complete 15,000-VM reference estate within bounded transport size', () => {

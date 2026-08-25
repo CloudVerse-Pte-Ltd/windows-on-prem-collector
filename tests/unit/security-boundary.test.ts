@@ -191,7 +191,7 @@ describe('C24 Windows collector security boundary', () => {
   it('the trusted JEA functions load every fixed host-native read-only command module without exposing Import-Module', async () => {
     const module = await readFile(new URL('../../scripts/jea/CloudVerseCollector/1.0.0/CloudVerseCollector.psm1', import.meta.url), 'utf8')
     const role = await readFile(new URL('../../scripts/jea/CloudVerseCollector/1.0.0/RoleCapabilities/CloudVerseCollector.psrc', import.meta.url), 'utf8')
-    for (const fixedImport of ['Import-Module CimCmdlets -ErrorAction Stop', 'Import-Module Hyper-V -ErrorAction Stop', 'Import-Module Microsoft.PowerShell.Diagnostics -ErrorAction Stop']) expect(module).toContain(fixedImport)
+    for (const fixedImport of ['Import-Module CimCmdlets -ErrorAction Stop', 'Import-Module FailoverClusters -ErrorAction Stop', 'Import-Module Hyper-V -ErrorAction Stop', 'Import-Module Microsoft.PowerShell.Diagnostics -ErrorAction Stop']) expect(module).toContain(fixedImport)
     expect(role).not.toContain('Import-Module')
     expect(role).toContain("VisibleCmdlets = @()")
   })

@@ -17,7 +17,9 @@ export interface ScvmmInventoryResult {
   provenance: { connectorId: 'cloudverse.hyperv.scvmm'; connectorVersion: string; collectionRunId: string; collectedAt: string; source: { endpoint: string; queryId: 'scvmm.inventory.v1' } }
 }
 
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const ZERO_GUID = /^0{8}-0{4}-0{4}-0{4}-0{12}$/i
 const MAX_PER_FAMILY = 100_000
 const families: Array<[string, ScvmmAssetKind]> = [
   ['hostGroups', 'HOST_GROUP'], ['clusters', 'CLUSTER'], ['hosts', 'HOST'], ['virtualMachines', 'VIRTUAL_MACHINE'], ['templates', 'TEMPLATE'],
@@ -31,7 +33,7 @@ function text(value: unknown, field: string, max = 2048) {
 }
 function uid(value: unknown, field: string) {
   const candidate = typeof value === 'string' ? value : value && typeof value === 'object' ? String((value as Record<string, unknown>).ID ?? '') : ''
-  if (!UUID.test(candidate)) throw new Error(`SCVMM inventory ${field} lacks an immutable GUID`)
+  if (!GUID.test(candidate) || ZERO_GUID.test(candidate)) throw new Error(`SCVMM inventory ${field} lacks an immutable GUID`)
   return candidate.toLowerCase()
 }
 function scalar(value: unknown): string | number | boolean | null | undefined {

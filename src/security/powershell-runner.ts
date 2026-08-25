@@ -29,6 +29,7 @@ export interface PowerShellRunnerOptions {
 
 export function recoverCompletedJeaOutput(error: unknown, args: readonly string[]): ProcessResult | undefined {
   if (!args.includes('-ConfigurationName') || typeof error !== 'object' || error === null) return undefined
+  if ((error as { code?: unknown }).code !== 1 || (error as { killed?: unknown }).killed === true || (error as { signal?: unknown }).signal) return undefined
   const stdout = typeof (error as { stdout?: unknown }).stdout === 'string' ? (error as { stdout: string }).stdout : ''
   const stderr = typeof (error as { stderr?: unknown }).stderr === 'string' ? (error as { stderr: string }).stderr : ''
   return stdout.trim() && !stderr.trim() ? { stdout, stderr } : undefined

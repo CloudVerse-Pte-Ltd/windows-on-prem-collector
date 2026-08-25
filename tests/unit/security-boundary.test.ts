@@ -44,6 +44,9 @@ describe('C24 Windows collector security boundary', () => {
     expect(recoverCompletedJeaOutput({ stdout: '', stderr: 'Access denied', code: 1 }, jea)).toBeUndefined()
     expect(recoverCompletedJeaOutput({ stdout: '{"partial":true}', stderr: 'failed', code: 1 }, jea)).toBeUndefined()
     expect(recoverCompletedJeaOutput({ stdout: 'FullLanguage\n', stderr: '', code: 1 }, ['-Command', 'Get-CloudVerseExecutionBoundary'])).toBeUndefined()
+    expect(recoverCompletedJeaOutput({ stdout: 'partial output', stderr: '', code: 2 }, jea)).toBeUndefined()
+    expect(recoverCompletedJeaOutput({ stdout: 'partial output', stderr: '', code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' }, jea)).toBeUndefined()
+    expect(recoverCompletedJeaOutput({ stdout: 'partial output', stderr: '', code: null, killed: true, signal: 'SIGTERM' }, jea)).toBeUndefined()
   })
 
   it('has a closed read-only command catalog with no mutation or generic execution cmdlets', () => {

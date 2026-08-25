@@ -14,11 +14,14 @@ $definitions = @(
 )
 $rows = @(); $gaps = @()
 foreach ($definition in $definitions) {
+    $stage = 'COUNTER_SET_DISCOVERY'
     try {
         $counterPaths = @(); $counterSet = Get-Counter -ListSet $definition.Set -ErrorAction Stop
         foreach ($candidatePath in @($counterSet.PathsWithInstances)) { if ($candidatePath.EndsWith("\$($definition.Counter)", [StringComparison]::OrdinalIgnoreCase)) { $counterPaths += $candidatePath } }
         if ($counterPaths.Count -eq 0) { throw "Counter set has no live instances for $($definition.Counter)" }
+        $stage = 'COUNTER_SAMPLE'
         $counter = Get-Counter -Counter $counterPaths -SampleInterval 1 -MaxSamples 1
+        $stage = 'COUNTER_IDENTITY_MAPPING'
         foreach ($sample in $counter.CounterSamples) {
             if ($sample.InstanceName -eq '_total') { continue }
             $matches = @()
@@ -33,7 +36,7 @@ foreach ($definition in $definitions) {
             $rows += [pscustomobject]@{ vmUid = [string]$matches[0].Id; vmName = [string]$matches[0].Name; metricKey = $definition.Key; timestamp = $sample.Timestamp.ToUniversalTime().ToString('o'); value = [double]$sample.CookedValue * [double]$definition.Scale; instanceName = [string]$sample.InstanceName; counterPath = [string]$sample.Path }
         }
     } catch {
-        $gaps += [pscustomobject]@{ code = 'COUNTER_UNAVAILABLE'; metricKey = $definition.Key; details = @{ errorType = 'COUNTER_READ_FAILED' } }
+        $gaps += [pscustomobject]@{ code = 'COUNTER_UNAVAILABLE'; metricKey = $definition.Key; details = @{ errorType = 'COUNTER_READ_FAILED'; stage = $stage; exceptionType = $_.Exception.GetType().FullName; hResult = $_.Exception.HResult } }
     }
 }
 [pscustomobject]@{ schemaVersion = '1.0'; capability = 'TELEMETRY'; platform = 'HYPERV'; transport = 'LOCAL_PERFORMANCE_COUNTERS'; collectedAt = $collectedAt; historyAvailable = $false; mutationAttempted = $false; rows = $rows; gaps = $gaps } | ConvertTo-Json -Depth 8 -Compress

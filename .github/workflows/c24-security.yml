@@ -31,7 +31,7 @@ jobs:
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Discover-Scvmm.ps1 -AllowedCommand $allowed
           $inventoryAllowed = @('ConvertTo-Json','Get-SCLogicalNetwork','Get-SCStorageArray','Get-SCStoragePool','Get-SCVirtualMachine','Get-SCVMCheckpoint','Get-SCVMHost','Get-SCVMHostCluster','Get-SCVMHostGroup','Get-SCVMNetwork','Get-SCVMTemplate','Get-SCVMMServer','Import-Module','Select-Object','Set-StrictMode','Sort-Object')
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-ScvmmInventory.ps1 -AllowedCommand $inventoryAllowed
-          $cimAllowed = @('ConvertTo-Json','Copy-CloudVerseProperties','Get-CimInstance','Set-StrictMode')
+          $cimAllowed = @('ConvertTo-Json','Copy-CloudVerseProperties','Get-CimInstance','Get-Cluster','Set-StrictMode')
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-HypervCimInventory.ps1 -AllowedCommand $cimAllowed
           $performanceAllowed = @('ConvertTo-Json','Get-Counter','Get-VM','Set-StrictMode')
           ./scripts/policy/Test-OperationalScriptPolicy.ps1 -ScriptPath ./scripts/operations/Collect-HypervPerformance.ps1 -AllowedCommand $performanceAllowed

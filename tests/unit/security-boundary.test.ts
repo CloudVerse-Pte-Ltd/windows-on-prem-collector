@@ -184,6 +184,7 @@ describe('C24 Windows collector security boundary', () => {
     const source = await readFile(new URL('../../scripts/operations/Collect-HypervCimInventory.ps1', import.meta.url), 'utf8')
     expect(source).toContain('root/virtualization/v2')
     expect(source).toContain('root/MSCluster')
+    expect(source).toContain('Get-Cluster -ErrorAction Stop')
     expect(source).not.toMatch(/-ComputerName|-CimSession|\b(?:Set|New|Remove|Start|Stop|Invoke)-(?!StrictMode)\w+/)
     expect(source).toContain('mutationAttempted = $false')
   })

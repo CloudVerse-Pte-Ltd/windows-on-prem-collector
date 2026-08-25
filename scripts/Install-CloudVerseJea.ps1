@@ -43,8 +43,8 @@ try {
   } else {
     $sessionParameters.RunAsVirtualAccount = $true
   }
-  New-PSSessionConfigurationFile @sessionParameters
-  Register-PSSessionConfiguration -Name $EndpointName -Path $configuration -Force -NoServiceRestart
+  New-PSSessionConfigurationFile @sessionParameters | Out-Null
+  Register-PSSessionConfiguration -Name $EndpointName -Path $configuration -Force -NoServiceRestart | Out-Null
   Restart-Service WinRM -Force
 } catch {
   Unregister-PSSessionConfiguration -Name $EndpointName -Force -ErrorAction SilentlyContinue

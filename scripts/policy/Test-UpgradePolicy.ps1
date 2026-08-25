@@ -21,5 +21,6 @@ foreach ($required in @(
   "Status='SUCCEEDED'",
   'RollbackDirectory=$backup'
 )) { if (-not $source.Contains($required)) { throw "Upgrade procedure omits transactional invariant: $required" } }
+if (([regex]::Matches($source, "Install-CloudVerseJea\.ps1'\).*?\| Out-Null")).Count -ne 2) { throw 'Upgrade procedure must suppress JEA registration output on success and rollback paths' }
 if ($source -match 'Remove-Item\s+-(?:Path|LiteralPath)\s+\$(?:install|backup)\b') { throw 'Upgrade procedure must never delete the active or rollback code tree' }
 [pscustomobject]@{Upgrade=$UpgradePath; Valid=$true} | ConvertTo-Json -Compress

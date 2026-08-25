@@ -197,6 +197,14 @@ describe('C24 Windows collector security boundary', () => {
     expect(role).toContain("VisibleCmdlets = @()")
   })
 
+  it('suppresses JEA registration objects so signed install and upgrade automation has one output contract', async () => {
+    const installer = await readFile(new URL('../../scripts/Install-CloudVerseJea.ps1', import.meta.url), 'utf8')
+    const upgrade = await readFile(new URL('../../scripts/Update-CloudVerseCollector.ps1', import.meta.url), 'utf8')
+    expect(installer).toContain('New-PSSessionConfigurationFile @sessionParameters | Out-Null')
+    expect(installer).toContain('Register-PSSessionConfiguration -Name $EndpointName -Path $configuration -Force -NoServiceRestart | Out-Null')
+    expect(upgrade.match(/Install-CloudVerseJea\.ps1[^\n]+\| Out-Null/g)).toHaveLength(2)
+  })
+
   it('the C32 source uses only local read-only counters and emits explicit mapping gaps', async () => {
     const source = await readFile(new URL('../../scripts/operations/Collect-HypervPerformance.ps1', import.meta.url), 'utf8')
     for (const command of ['Get-VM', 'Get-Counter', 'ConvertTo-Json']) expect(source).toContain(command)

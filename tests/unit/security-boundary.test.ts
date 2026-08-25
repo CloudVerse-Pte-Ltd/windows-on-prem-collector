@@ -8,7 +8,7 @@ import { COMMAND_CATALOG, ConstrainedPowerShellRunner, parseReleaseManifest, red
 const temporaryDirectories: string[] = []
 const thumbprint = 'A'.repeat(40)
 
-async function harness(options: { tamper?: boolean; signatureStatus?: string; signer?: string; jea?: boolean; inventoryPages?: unknown[] } = {}) {
+async function harness(options: { tamper?: boolean; signatureStatus?: string; signer?: string; jea?: boolean; jeaPermitsUnknown?: boolean; inventoryPages?: unknown[] } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'cv-windows-collector-')); temporaryDirectories.push(directory)
   const script = Buffer.from('Get-SCVMMServer\n')
   const inventoryScript = Buffer.from('Get-SCVirtualMachine\n')
@@ -25,8 +25,10 @@ async function harness(options: { tamper?: boolean; signatureStatus?: string; si
     'Collect-HypervCimInventory.ps1': { sha256: createHash('sha256').update(cimScript).digest('hex'), signerThumbprints: [thumbprint] },
     'Collect-HypervPerformance.ps1': { sha256: createHash('sha256').update(performanceScript).digest('hex'), signerThumbprints: [thumbprint] },
   } }))
-  const executor = vi.fn(async (_file: string, args: readonly string[]) => args.includes('[string]$ExecutionContext.SessionState.LanguageMode') || args.includes('Get-CloudVerseExecutionBoundary')
-    ? { stdout: options.jea ? 'NoLanguage\n' : 'ConstrainedLanguage\n', stderr: '' }
+  const executor = vi.fn(async (_file: string, args: readonly string[]) => args.includes('Get-Process') && !options.jeaPermitsUnknown
+    ? Promise.reject(new Error('The term Get-Process is not recognized'))
+    : args.includes('[string]$ExecutionContext.SessionState.LanguageMode') || args.includes('Get-CloudVerseExecutionBoundary')
+    ? { stdout: options.jea ? 'FullLanguage\n' : 'ConstrainedLanguage\n', stderr: '' }
     : args.some((item) => item.includes('Get-AuthenticodeSignature')) ? { stdout: JSON.stringify({ Status: options.signatureStatus ?? 'Valid', Thumbprint: options.signer ?? thumbprint }), stderr: '' }
     : options.inventoryPages && args.includes('-PageNumber') ? { stdout: JSON.stringify(options.inventoryPages[Number(args[args.indexOf('-PageNumber') + 1])]), stderr: '' }
     : { stdout: JSON.stringify({ schemaVersion: '1.0', requestedRole: 'ReadOnlyAdmin' }), stderr: '' })
@@ -91,9 +93,15 @@ describe('C24 Windows collector security boundary', () => {
     await runner.runScvmmDiscovery({ server: 'vmm01.example.com', port: 8100 })
     const [, probe] = executor.mock.calls[0]
     expect(probe).toContain('CloudVerseCollector'); expect(probe).toContain('Get-CloudVerseExecutionBoundary')
+    expect(executor.mock.calls[1]![1]).toContain('Get-Process')
     const [, operation] = executor.mock.calls.at(-1)!
     expect(operation).toEqual(['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'AllSigned', '-ConfigurationName', 'CloudVerseCollector', '-Command', 'Invoke-CloudVerseScvmmDiscovery', '-Server', 'vmm01.example.com', '-Port', '8100'])
     expect(operation).not.toContain('-File')
+  })
+
+  it('fails closed when the JEA caller can execute a command outside the role capability', async () => {
+    const { runner } = await harness({ jea: true, jeaPermitsUnknown: true })
+    await expect(runner.initialize()).rejects.toThrow('outside the fixed role capability')
   })
 
   it('collects SCVMM inventory in fixed source pages and validates completion metadata', async () => {

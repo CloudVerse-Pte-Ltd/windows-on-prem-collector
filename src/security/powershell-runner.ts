@@ -13,6 +13,7 @@ const WINDOWS_POWERSHELL_PATH = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\
 const authenticodeProbe = (path: string) => `$s=Get-AuthenticodeSignature -LiteralPath '${path.replace(/'/g, "''")}'; [pscustomobject]@{Status=[string]$s.Status;Thumbprint=[string]$s.SignerCertificate.Thumbprint}|ConvertTo-Json -Compress`
 const LANGUAGE_MODE_PROBE = '[string]$ExecutionContext.SessionState.LanguageMode'
 const JEA_LANGUAGE_MODE_PROBE = 'Get-CloudVerseExecutionBoundary'
+const JEA_DENIED_COMMAND_PROBE = 'Get-Process'
 
 export interface ProcessResult { stdout: string; stderr: string }
 export type ProcessExecutor = (file: string, args: readonly string[], options: { timeout: number; maxBuffer: number; windowsHide: boolean }) => Promise<ProcessResult>
@@ -42,9 +43,19 @@ export class ConstrainedPowerShellRunner {
 
   async initialize() {
     this.manifest = parseReleaseManifest(JSON.parse(await readFile(this.options.manifestPath, 'utf8')))
-    const languageMode = await this.executor(this.powershellPath, [...FIXED_POWERSHELL_ARGUMENTS, ...(this.options.jeaEndpointName ? ['-ConfigurationName', this.options.jeaEndpointName] : []), '-Command', this.options.jeaEndpointName ? JEA_LANGUAGE_MODE_PROBE : LANGUAGE_MODE_PROBE], { timeout: 30_000, maxBuffer: 64 * 1024, windowsHide: true })
-    const expectedLanguageMode = this.options.jeaEndpointName ? 'NoLanguage' : 'ConstrainedLanguage'
-    if (languageMode.stdout.trim() !== expectedLanguageMode) throw new Error(`Windows PowerShell must run in ${expectedLanguageMode} mode under the configured ${this.options.jeaEndpointName ? 'JEA' : 'WDAC/AppLocker'} boundary`)
+    if (this.options.jeaEndpointName) {
+      const endpointArguments = [...FIXED_POWERSHELL_ARGUMENTS, '-ConfigurationName', this.options.jeaEndpointName, '-Command']
+      const trustedModule = await this.executor(this.powershellPath, [...endpointArguments, JEA_LANGUAGE_MODE_PROBE], { timeout: 30_000, maxBuffer: 64 * 1024, windowsHide: true })
+      if (trustedModule.stdout.trim() !== 'FullLanguage') throw new Error('The signed JEA role-capability module did not execute in its trusted FullLanguage scope')
+      let denied = false
+      try {
+        await this.executor(this.powershellPath, [...endpointArguments, JEA_DENIED_COMMAND_PROBE], { timeout: 30_000, maxBuffer: 64 * 1024, windowsHide: true })
+      } catch { denied = true }
+      if (!denied) throw new Error('The JEA caller boundary permitted a command outside the fixed role capability')
+    } else {
+      const languageMode = await this.executor(this.powershellPath, [...FIXED_POWERSHELL_ARGUMENTS, '-Command', LANGUAGE_MODE_PROBE], { timeout: 30_000, maxBuffer: 64 * 1024, windowsHide: true })
+      if (languageMode.stdout.trim() !== 'ConstrainedLanguage') throw new Error('Windows PowerShell must run in ConstrainedLanguage mode under the configured WDAC/AppLocker boundary')
+    }
     for (const [operationId, operation] of Object.entries(COMMAND_CATALOG)) await this.verifyScript(operationId as OperationId, operation.script)
   }
 

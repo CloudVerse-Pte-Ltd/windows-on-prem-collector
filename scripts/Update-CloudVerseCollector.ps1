@@ -33,8 +33,13 @@ $jeaBackup = Join-Path $parent "CloudVerseCollector.JEA.rollback.$upgradeId"
 $endpointName = if ($configuration.executionBoundary.kind -eq 'JEA') { [string]$configuration.executionBoundary.endpointName } else { $null }
 $serviceAccount = [string]$task.Principal.UserId
 if ([string]$configuration.mode -eq 'SCVMM') {
-  if ($serviceAccount -notmatch '^[^\\]+\\[^\\$]+\$?$') { throw 'Installed SCVMM task identity is not a domain gMSA' }
-  $serviceAccount = $serviceAccount.TrimEnd([char]'$') + '$'
+  if ($serviceAccount -match '^[^\\$]+\$$') {
+    $domain = [string]@(Get-CimInstance -ClassName Win32_ComputerSystem -Property Domain -ErrorAction Stop)[0].Domain
+    if ($domain -notmatch '^[A-Za-z0-9.-]{1,253}$') { throw 'Joined domain cannot be resolved for the installed SCVMM gMSA' }
+    $serviceAccount = "$domain\$serviceAccount"
+  } elseif ($serviceAccount -match '^[^\\]+\\[^\\$]+\$?$') {
+    $serviceAccount = $serviceAccount.TrimEnd([char]'$') + '$'
+  } else { throw 'Installed SCVMM task identity is not a domain gMSA' }
 }
 $oldAcl = Get-Acl $install
 $taskStopped = $false; $treeSwapped = $false

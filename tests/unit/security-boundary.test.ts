@@ -205,6 +205,8 @@ describe('C24 Windows collector security boundary', () => {
     expect(installer).toContain('Register-PSSessionConfiguration -Name $EndpointName -Path $configuration -Force -NoServiceRestart | Out-Null')
     expect(upgrade.match(/Install-CloudVerseJea\.ps1[^\n]+\| Out-Null/g)).toHaveLength(2)
     expect(upgrade).toContain("$serviceAccount = $serviceAccount.TrimEnd([char]'$') + '$'")
+    expect(upgrade).toContain('Get-CimInstance -ClassName Win32_ComputerSystem -Property Domain')
+    expect(upgrade).toContain('$serviceAccount = "$domain\\$serviceAccount"')
     expect(upgrade.match(/-ServiceAccount \$serviceAccount/g)).toHaveLength(2)
   })
 

@@ -27,7 +27,21 @@ export interface PowerShellRunnerOptions {
   executor?: ProcessExecutor
 }
 
-const defaultExecutor: ProcessExecutor = async (file, args, options) => execFileAsync(file, [...args], { ...options, encoding: 'utf8' })
+export function recoverCompletedJeaOutput(error: unknown, args: readonly string[]): ProcessResult | undefined {
+  if (!args.includes('-ConfigurationName') || typeof error !== 'object' || error === null) return undefined
+  const stdout = typeof (error as { stdout?: unknown }).stdout === 'string' ? (error as { stdout: string }).stdout : ''
+  const stderr = typeof (error as { stderr?: unknown }).stderr === 'string' ? (error as { stderr: string }).stderr : ''
+  return stdout.trim() && !stderr.trim() ? { stdout, stderr } : undefined
+}
+
+const defaultExecutor: ProcessExecutor = async (file, args, options) => {
+  try { return await execFileAsync(file, [...args], { ...options, encoding: 'utf8' }) }
+  catch (error) {
+    const completed = recoverCompletedJeaOutput(error, args)
+    if (completed) return completed
+    throw error
+  }
+}
 
 export class ConstrainedPowerShellRunner {
   private readonly powershellPath: string

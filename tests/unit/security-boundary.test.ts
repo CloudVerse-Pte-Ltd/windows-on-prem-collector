@@ -3,7 +3,7 @@ import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { COMMAND_CATALOG, ConstrainedPowerShellRunner, parseReleaseManifest, redactWindowsCollectorError, validateScvmmDiscoveryParameters } from '../../src/index.js'
+import { COMMAND_CATALOG, ConstrainedPowerShellRunner, parseReleaseManifest, recoverCompletedJeaOutput, redactWindowsCollectorError, validateScvmmDiscoveryParameters } from '../../src/index.js'
 
 const temporaryDirectories: string[] = []
 const thumbprint = 'A'.repeat(40)
@@ -38,6 +38,14 @@ async function harness(options: { tamper?: boolean; signatureStatus?: string; si
 afterEach(async () => Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))))
 
 describe('C24 Windows collector security boundary', () => {
+  it('recovers only non-empty stderr-free output from the Windows JEA shell-close anomaly', () => {
+    const jea = ['-ConfigurationName', 'CloudVerseCollector', '-Command', 'Get-CloudVerseExecutionBoundary']
+    expect(recoverCompletedJeaOutput({ stdout: 'FullLanguage\n', stderr: '', code: 1 }, jea)).toEqual({ stdout: 'FullLanguage\n', stderr: '' })
+    expect(recoverCompletedJeaOutput({ stdout: '', stderr: 'Access denied', code: 1 }, jea)).toBeUndefined()
+    expect(recoverCompletedJeaOutput({ stdout: '{"partial":true}', stderr: 'failed', code: 1 }, jea)).toBeUndefined()
+    expect(recoverCompletedJeaOutput({ stdout: 'FullLanguage\n', stderr: '', code: 1 }, ['-Command', 'Get-CloudVerseExecutionBoundary'])).toBeUndefined()
+  })
+
   it('has a closed read-only command catalog with no mutation or generic execution cmdlets', () => {
     expect(Object.keys(COMMAND_CATALOG)).toEqual(['scvmm.discovery.v1', 'scvmm.inventory.v1', 'hyperv.cim.inventory.v1', 'hyperv.performance.v1'])
     const commands = Object.values(COMMAND_CATALOG).flatMap((operation) => [...operation.allowedCommands])

@@ -14,7 +14,7 @@
     "ci": "npm ci && npm run typecheck && npm run build && npm test && npm audit --omit=dev --audit-level=moderate"
   },
   "dependencies": {
-    "undici": "^7.16.0"
+    "undici": "^7.29.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
